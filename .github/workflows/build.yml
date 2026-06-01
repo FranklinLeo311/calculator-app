@@ -24,11 +24,6 @@ jobs:
       - name: Setup EAS
         run: npm install -g eas-cli
       
-      - name: Authenticate with Expo
-        run: |
-          mkdir -p ~/.eas
-          echo '{"username":"${{ secrets.EXPO_USERNAME }}","sessionSecret":"${{ secrets.EXPO_SESSION_SECRET }}"}' > ~/.eas/credentials.json
-      
       - name: Build APK with EAS
         run: eas build -p android --non-interactive --wait
         env:
