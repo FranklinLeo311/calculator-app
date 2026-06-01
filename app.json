@@ -1,0 +1,19 @@
+{
+    "expo": {
+        "name": "Expo Calculator",
+        "slug": "expo-calculator",
+        "version": "1.0.0",
+        "sdkVersion": "48.0.0",
+        "platforms": [
+            "ios",
+            "android",
+            "web"
+        ],
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "splash": {
+            "resizeMode": "contain",
+            "backgroundColor": "#0F172A"
+        }
+    }
+}
