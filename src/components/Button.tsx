@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, Animated, View } from 'react-native';
+import { Pressable, Text, StyleSheet, Animated, View, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 type Props = {
@@ -21,8 +21,27 @@ export default function Button({ label, onPress, className = '' }: Props) {
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
     const shadowAnim = React.useRef(new Animated.Value(0)).current;
 
-    const handlePressIn = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const triggerHaptic = async () => {
+        if (Platform.OS === 'ios' || Platform.OS === 'android') {
+            try {
+                await Haptics.impactAsync(
+                    Haptics.ImpactFeedbackStyle.Light
+                );
+            } catch (error) {
+                console.log('Haptics unavailable:', error);
+            }
+        }
+    };
+
+    const handlePressIn = async () => {
+        await triggerHaptic();
+
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(
+                Haptics.ImpactFeedbackStyle.Light
+            ).catch(() => { });
+        }
+
         Animated.parallel([
             Animated.spring(scaleAnim, {
                 toValue: 0.92,

@@ -1,19 +1,27 @@
 {
-    "expo": {
-        "name": "Expo Calculator",
-        "slug": "expo-calculator",
-        "version": "1.0.0",
-        "sdkVersion": "48.0.0",
-        "platforms": [
-            "ios",
-            "android",
-            "web"
-        ],
-        "orientation": "portrait",
-        "icon": "./assets/icon.png",
-        "splash": {
-            "resizeMode": "contain",
-            "backgroundColor": "#0F172A"
-        }
+  "expo": {
+    "name": "Expo Calculator",
+    "slug": "expo-calculator",
+    "version": "1.0.0",
+    "sdkVersion": "48.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "16be0677-4162-4377-9552-e85b839aaf8d"
+      }
+    },
+    "android": {
+      "package": "franklinleo.calculator"
     }
+  }
 }
