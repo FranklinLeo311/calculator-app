@@ -1,129 +1,149 @@
-import { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { evaluate } from 'mathjs';
+import { useEffect, useState, useCallback } from 'react';
+import { safeEvaluate } from '../utils/mathEngine';
+import { storageGet, storageSet } from '../utils/storage';
 
-const HISTORY_KEY = 'calc_history_v1';
+const MAX_HISTORY = 200;
 
-export type HistoryItem = { id: string; expression: string; result: string; time: number };
+export type HistoryItem = {
+    id: string;
+    expression: string;
+    result: string;
+    time: number;
+};
 
-export default function useCalculator() {
+export default function useCalculator(storageKey = 'calc_history_v1') {
     const [expression, setExpression] = useState<string>('');
     const [result, setResult] = useState<string>('0');
     const [history, setHistory] = useState<HistoryItem[]>([]);
 
+    // Load persisted history on mount
     useEffect(() => {
-        loadHistory();
+        storageGet<HistoryItem[]>(storageKey).then(saved => {
+            if (Array.isArray(saved)) setHistory(saved);
+        });
     }, []);
 
+    // Live-evaluate as user types; never throw into React render
     useEffect(() => {
         try {
-            const res = safeEvaluate(expression);
-            setResult(res);
-        } catch (e) {
-            setResult('');
+            const { value } = safeEvaluate(expression);
+            if (value) setResult(value);
+        } catch {
+            // silent — display keeps previous valid result
         }
     }, [expression]);
 
-    async function loadHistory() {
+    const persistHistory = useCallback(async (items: HistoryItem[]) => {
+        setHistory(items);
+        await storageSet(storageKey, items);
+    }, []);
+
+    const input = useCallback((value: string) => {
         try {
-            const raw = await AsyncStorage.getItem(HISTORY_KEY);
-            if (raw) setHistory(JSON.parse(raw));
-        } catch (e) {
+            if (!value) return;
+            setExpression(prev => {
+                // prevent consecutive decimal points in the same number segment
+                if (value === '.' && /\.$/.test(prev)) return prev;
+                return prev + value;
+            });
+        } catch {
             // ignore
         }
-    }
+    }, []);
 
-    async function saveHistory(items: HistoryItem[]) {
+    const inputOperator = useCallback((op: string) => {
         try {
-            setHistory(items);
-            await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(items));
-        } catch (err) {
-            console.log('AsyncStorage error:', err);
+            if (!op) return;
+            setExpression(prev => {
+                if (!prev) return prev;
+                // replace trailing operator instead of stacking
+                if (/[+\-×÷/*^]$/.test(prev)) {
+                    return prev.slice(0, -1) + op;
+                }
+                return prev + op;
+            });
+        } catch {
+            // ignore
         }
-    }
+    }, []);
 
-    function safeEvaluate(expr: string) {
-        if (!expr) return '0';
-        // normalize operators
-        const normalized = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'pi');
-        // convert trailing % by replacing n% with (n/100)
-        const percentNormalized = normalized.replace(/(\d+\.?\d*)%/g, '($1/100)');
-        const raw = evaluate(percentNormalized);
-        if (typeof raw === 'number') {
-            return formatNumber(raw);
+    const clearEntry = useCallback(() => {
+        try {
+            setExpression('');
+            setResult('0');
+        } catch {
+            // ignore
         }
-        return String(raw);
-    }
+    }, []);
 
-    function formatNumber(n: number) {
-        const rounded = Math.round((n + Number.EPSILON) * 1e12) / 1e12;
-        return String(rounded);
-    }
-
-    function input(value: string) {
-        // prevent invalid sequence
-        if (value === '.' && /\.$/.test(expression)) return;
-        setExpression(prev => prev + value);
-    }
-
-    function inputOperator(op: string) {
-        if (!expression) return;
-        // avoid double operators
-        if (/[+\-×÷/*^]$/.test(expression)) {
-            setExpression(prev => prev.slice(0, -1) + op);
-        } else {
-            setExpression(prev => prev + op);
+    const backspace = useCallback(() => {
+        try {
+            setExpression(prev => (prev.length > 0 ? prev.slice(0, -1) : prev));
+        } catch {
+            // ignore
         }
-    }
+    }, []);
 
-    function clearEntry() {
-        setExpression('');
-        setResult('0');
-    }
+    const toggleSign = useCallback(() => {
+        try {
+            setExpression(prev => {
+                if (!prev) return prev;
+                const match = prev.match(/(.*?)([-]?\d+\.?\d*)$/);
+                if (!match) return prev;
+                const [, prefix, num] = match;
+                return num.startsWith('-')
+                    ? (prefix ?? '') + num.slice(1)
+                    : (prefix ?? '') + '-' + num;
+            });
+        } catch {
+            // ignore
+        }
+    }, []);
 
-    function backspace() {
-        setExpression(prev => prev.slice(0, -1));
-    }
+    const evaluateExpression = useCallback(async (): Promise<string> => {
+        try {
+            const { value, error } = safeEvaluate(expression);
 
-    function toggleSign() {
-        if (!expression) return;
-        // naive: toggle sign of last number
-        const m = expression.match(/(.*?)([-]?\d+\.?\d*)$/);
-        if (m) {
-            const prefix = m[1] || '';
-            const num = m[2];
-            if (num.startsWith('-')) {
-                setExpression(prefix + num.slice(1));
-            } else {
-                setExpression(prefix + '-' + num);
+            if (error || !value) {
+                setResult('Error');
+                return 'Error';
             }
-        }
-    }
 
-    async function evaluateExpression() {
-        try {
-            const res = safeEvaluate(expression);
-            const item: HistoryItem = { id: String(Date.now()), expression, result: res, time: Date.now() };
-            const newHistory = [item, ...history].slice(0, 200);
-            await saveHistory(newHistory);
-            setExpression(res);
-            setResult(res);
-            return res;
-        } catch (e) {
-            console.log('Evaluate error:', e);
+            const item: HistoryItem = {
+                id: `${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+                expression,
+                result: value,
+                time: Date.now(),
+            };
+
+            const updated = [item, ...history].slice(0, MAX_HISTORY);
+            await persistHistory(updated);
+
+            setExpression(value);
+            setResult(value);
+            return value;
+        } catch {
             setResult('Error');
             return 'Error';
         }
-    }
+    }, [expression, history, persistHistory]);
 
-    function loadFromHistory(item: HistoryItem) {
-        setExpression(item.expression);
-        setResult(item.result);
-    }
+    const loadFromHistory = useCallback((item: HistoryItem) => {
+        try {
+            setExpression(item.expression ?? '');
+            setResult(item.result ?? '0');
+        } catch {
+            // ignore
+        }
+    }, []);
 
-    function clearHistory() {
-        saveHistory([]);
-    }
+    const clearHistory = useCallback(async () => {
+        try {
+            await persistHistory([]);
+        } catch {
+            setHistory([]);
+        }
+    }, [persistHistory]);
 
     return {
         expression,
@@ -136,6 +156,6 @@ export default function useCalculator() {
         toggleSign,
         evaluateExpression,
         loadFromHistory,
-        clearHistory
+        clearHistory,
     } as const;
 }

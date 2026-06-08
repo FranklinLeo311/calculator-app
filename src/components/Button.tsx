@@ -1,47 +1,40 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, Animated, View, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Colors } from '../config/theme';
+
+export type ButtonVariant = 'number' | 'operator' | 'equals' | 'clear' | 'scientific' | 'backspace';
+
+const VARIANT_COLORS: Record<ButtonVariant, string> = {
+    number:     Colors.button.number,
+    operator:   Colors.button.operator,
+    equals:     Colors.button.equals,
+    clear:      Colors.button.clear,
+    scientific: Colors.button.scientific,
+    backspace:  Colors.button.backspace,
+};
 
 type Props = {
     label: string;
     onPress: () => void;
-    className?: string;
+    variant?: ButtonVariant;
 };
 
-const getButtonColor = (className: string) => {
-    if (className.includes('from-red')) return '#dc2626';
-    if (className.includes('from-green')) return '#16a34a';
-    if (className.includes('from-orange')) return '#ea580c';
-    if (className.includes('from-purple')) return '#9333ea';
-    if (className.includes('from-blue')) return '#2563eb';
-    return '#475569';
-};
+async function triggerHaptic(): Promise<void> {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
+    try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+        // haptics unavailable on this device
+    }
+}
 
-export default function Button({ label, onPress, className = '' }: Props) {
+export default function Button({ label, onPress, variant = 'number' }: Props) {
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
     const shadowAnim = React.useRef(new Animated.Value(0)).current;
 
-    const triggerHaptic = async () => {
-        if (Platform.OS === 'ios' || Platform.OS === 'android') {
-            try {
-                await Haptics.impactAsync(
-                    Haptics.ImpactFeedbackStyle.Light
-                );
-            } catch (error) {
-                console.log('Haptics unavailable:', error);
-            }
-        }
-    };
-
     const handlePressIn = async () => {
         await triggerHaptic();
-
-        if (Platform.OS !== 'web') {
-            Haptics.impactAsync(
-                Haptics.ImpactFeedbackStyle.Light
-            ).catch(() => { });
-        }
-
         Animated.parallel([
             Animated.spring(scaleAnim, {
                 toValue: 0.92,
@@ -83,32 +76,29 @@ export default function Button({ label, onPress, className = '' }: Props) {
         outputRange: [8, 12],
     });
 
-    const backgroundColor = getButtonColor(className);
+    const handlePress = () => {
+        try {
+            onPress();
+        } catch {
+            // swallow unexpected errors from press handlers
+        }
+    };
 
     return (
         <View style={styles.container}>
             <Animated.View
                 style={[
-                    {
-                        transform: [{ scale: scaleAnim }],
-                        shadowOpacity,
-                        shadowRadius,
-                    },
                     styles.animatedWrapper,
+                    { transform: [{ scale: scaleAnim }], shadowOpacity, shadowRadius },
                 ]}
             >
                 <Pressable
-                    style={({ pressed }) => [
-                        styles.button,
-                        { backgroundColor },
-                    ]}
-                    onPress={() => {
-                        onPress();
-                    }}
+                    style={[styles.button, { backgroundColor: VARIANT_COLORS[variant] }]}
+                    onPress={handlePress}
                     onPressIn={handlePressIn}
                     onPressOut={handlePressOut}
                 >
-                    <Text style={styles.buttonText}>{label}</Text>
+                    <Text style={styles.label}>{label}</Text>
                 </Pressable>
             </Animated.View>
         </View>
@@ -118,7 +108,6 @@ export default function Button({ label, onPress, className = '' }: Props) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        margin: 0,
     },
     animatedWrapper: {
         flex: 1,
@@ -137,8 +126,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
     },
-    buttonText: {
-        color: '#ffffff',
+    label: {
+        color: Colors.text.white,
         fontSize: 14,
         fontWeight: '700',
         letterSpacing: 0.3,

@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import HistoryItemCard from './HistoryItemCard';
 import type { HistoryItem } from '../hooks/useCalculator';
+import { Colors, FontSize, Spacing, Radii } from '../config/theme';
 
 type Props = {
     items: HistoryItem[];
@@ -9,44 +11,49 @@ type Props = {
 };
 
 export default function HistoryPanel({ items, onSelect, onClear }: Props) {
+    const handleClear = () => {
+        try {
+            onClear();
+        } catch {
+            // ignore
+        }
+    };
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>Calculation History</Text>
-                <TouchableOpacity
-                    onPress={onClear}
-                    style={styles.clearButton}
-                >
-                    <Text style={styles.clearButtonText}>Clear All</Text>
-                </TouchableOpacity>
+                {items.length > 0 && (
+                    <TouchableOpacity
+                        onPress={handleClear}
+                        style={styles.clearButton}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.clearButtonText}>Clear All</Text>
+                    </TouchableOpacity>
+                )}
             </View>
+
             {items.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>No history yet</Text>
-                    <Text style={styles.emptySubtext}>Your calculations will appear here</Text>
+                <View style={styles.empty}>
+                    <Text style={styles.emptyTitle}>No history yet</Text>
+                    <Text style={styles.emptySubtitle}>
+                        Your calculations will appear here
+                    </Text>
                 </View>
             ) : (
                 <FlatList
                     data={items}
-                    keyExtractor={i => i.id}
+                    keyExtractor={item => item.id}
                     renderItem={({ item, index }) => (
-                        <TouchableOpacity
-                            onPress={() => onSelect(item)}
-                            style={[
-                                styles.historyItem,
-                                { marginBottom: index === items.length - 1 ? 20 : 12 }
-                            ]}
-                        >
-                            <View style={styles.itemContent}>
-                                <Text style={styles.expression}>{item.expression}</Text>
-                                <View style={styles.resultBadge}>
-                                    <Text style={styles.resultText}>{item.result}</Text>
-                                </View>
-                            </View>
-                        </TouchableOpacity>
+                        <HistoryItemCard
+                            item={item}
+                            onSelect={onSelect}
+                            isLast={index === items.length - 1}
+                        />
                     )}
                     contentContainerStyle={styles.listContent}
-                    scrollEnabled={true}
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </View>
@@ -56,89 +63,51 @@ export default function HistoryPanel({ items, onSelect, onClear }: Props) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingHorizontal: 16,
-        paddingTop: 12,
+        paddingHorizontal: Spacing.xl,
+        paddingTop: Spacing.lg,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
-        paddingHorizontal: 4,
+        marginBottom: Spacing.xl,
+        paddingHorizontal: Spacing.xs,
     },
     title: {
-        fontSize: 20,
+        fontSize: FontSize.xl,
         fontWeight: '700',
-        color: '#f1f5f9',
+        color: Colors.text.primary,
         letterSpacing: 0.3,
     },
     clearButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.xs + 2,
+        borderRadius: Radii.sm,
+        backgroundColor: Colors.errorSoft,
         borderWidth: 1,
-        borderColor: '#ef4444',
+        borderColor: Colors.error,
     },
     clearButtonText: {
-        color: '#ef4444',
-        fontSize: 12,
+        color: Colors.error,
+        fontSize: FontSize.xs,
         fontWeight: '600',
     },
     listContent: {
-        paddingBottom: 10,
+        paddingBottom: Spacing.md,
     },
-    historyItem: {
-        backgroundColor: 'rgba(71, 85, 105, 0.4)',
-        borderRadius: 12,
-        padding: 14,
-        borderLeftWidth: 4,
-        borderLeftColor: '#10b981',
-        borderWidth: 1,
-        borderColor: 'rgba(148, 163, 184, 0.2)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-        elevation: 3,
-    },
-    itemContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    expression: {
-        color: '#cbd5e1',
-        fontSize: 14,
-        flex: 1,
-        fontWeight: '500',
-    },
-    resultBadge: {
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderWidth: 1,
-        borderColor: '#10b981',
-    },
-    resultText: {
-        color: '#10b981',
-        fontSize: 14,
-        fontWeight: '700',
-    },
-    emptyState: {
+    empty: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    emptyText: {
-        fontSize: 18,
+    emptyTitle: {
+        fontSize: FontSize.lg,
         fontWeight: '600',
-        color: '#94a3b8',
-        marginBottom: 8,
+        color: Colors.text.secondary,
+        marginBottom: Spacing.md,
     },
-    emptySubtext: {
-        fontSize: 14,
-        color: '#64748b',
+    emptySubtitle: {
+        fontSize: FontSize.md,
+        color: Colors.text.muted,
     },
 });

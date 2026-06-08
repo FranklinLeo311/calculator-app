@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Colors, FontSize, Spacing, Radii } from '../config/theme';
 
 type Props = {
     formula: string;
@@ -7,22 +8,27 @@ type Props = {
 };
 
 export default function Display({ formula, result }: Props) {
+    const displayFormula = formula?.trim() ? formula : '0';
+    const displayResult = result?.trim() ? result : '0';
+
     return (
         <View style={styles.container}>
-            <View style={styles.displayBox}>
+            <View style={styles.box}>
                 <Text
                     style={styles.formula}
                     numberOfLines={1}
                     ellipsizeMode="tail"
+                    accessibilityLabel={`Expression: ${displayFormula}`}
                 >
-                    {formula || '0'}
+                    {displayFormula}
                 </Text>
                 <Text
                     style={styles.result}
                     numberOfLines={1}
                     ellipsizeMode="tail"
+                    accessibilityLabel={`Result: ${displayResult}`}
                 >
-                    {result || '0'}
+                    {displayResult}
                 </Text>
             </View>
         </View>
@@ -31,15 +37,15 @@ export default function Display({ formula, result }: Props) {
 
 const styles = StyleSheet.create({
     container: {
-        paddingHorizontal: 20,
-        paddingVertical: 24,
+        paddingHorizontal: Spacing.xxl,
+        paddingVertical: Spacing.xxxl,
     },
-    displayBox: {
-        backgroundColor: 'rgba(15, 23, 42, 0.6)',
-        borderRadius: 16,
-        padding: 20,
+    box: {
+        backgroundColor: Colors.surface,
+        borderRadius: Radii.xl,
+        padding: Spacing.xxl,
         borderWidth: 1,
-        borderColor: 'rgba(148, 163, 184, 0.2)',
+        borderColor: Colors.surfaceBorder,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.4,
@@ -47,18 +53,18 @@ const styles = StyleSheet.create({
         elevation: 8,
     },
     formula: {
-        color: '#94a3b8',
-        fontSize: 14,
+        color: Colors.text.secondary,
+        fontSize: FontSize.md,
         textAlign: 'right',
-        marginBottom: 8,
+        marginBottom: Spacing.md,
         fontWeight: '500',
         letterSpacing: 0.5,
     },
     result: {
-        color: '#10b981',
-        fontSize: 48,
+        color: Colors.accent,
+        fontSize: FontSize.display,
         fontWeight: '700',
         textAlign: 'right',
         letterSpacing: -1,
-    }
+    },
 });
