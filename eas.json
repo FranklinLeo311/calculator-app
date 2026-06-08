@@ -1,11 +1,13 @@
 {
     "build": {
         "preview": {
+            "node": "20.x",
             "android": {
                 "buildType": "apk"
             }
         },
         "production": {
+            "node": "20.x",
             "android": {
                 "buildType": "app-bundle"
             }
