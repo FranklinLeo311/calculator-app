@@ -15,11 +15,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
-    "extra": {
-      "eas": {
-        "projectId": "16be0677-4162-4377-9552-e85b839aaf8d"
-      }
-    },
+    "extra": {},
     "android": {
       "package": "franklinleo.calculator"
     }
