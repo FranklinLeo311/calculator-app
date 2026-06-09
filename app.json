@@ -15,13 +15,27 @@
       "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow My Maths to access your photos to upload documents.",
+          "cameraPermission": "Allow My Maths to use the camera to capture documents."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "934d18af-9c07-4c86-843e-e61426394541"
       }
     },
     "android": {
-      "package": "franklinleo.calculator"
+      "package": "franklinleo.calculator",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "owner": "franklinantony311",
     "ios": {
