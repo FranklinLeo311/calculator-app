@@ -3,6 +3,11 @@ export const Colors = {
     backgroundEnd: '#1e293b',
     surface: 'rgba(15, 23, 42, 0.6)',
     surfaceBorder: 'rgba(148, 163, 184, 0.2)',
+    card: 'rgba(30, 41, 59, 0.8)',
+    cardBorder: 'rgba(148, 163, 184, 0.15)',
+    input: 'rgba(15, 23, 42, 0.9)',
+    inputBorder: 'rgba(148, 163, 184, 0.3)',
+    divider: 'rgba(148, 163, 184, 0.1)',
     text: {
         primary: '#f1f5f9',
         secondary: '#94a3b8',
@@ -24,6 +29,28 @@ export const Colors = {
         backspace: '#2563eb',
     },
     historyCard: 'rgba(71, 85, 105, 0.4)',
+    gold: '#F59E0B',
+    goldSoft: 'rgba(245, 158, 11, 0.15)',
+    silver: '#94A3B8',
+    silverSoft: 'rgba(148, 163, 184, 0.15)',
+    chart: {
+        green: '#10b981',
+        blue: '#3B82F6',
+        amber: '#F59E0B',
+        red: '#EF4444',
+        purple: '#8B5CF6',
+        pink: '#EC4899',
+        cyan: '#06B6D4',
+        orange: '#F97316',
+    },
+    tool: {
+        ctc: '#10b981',
+        emi: '#3B82F6',
+        gst: '#F59E0B',
+        currency: '#8B5CF6',
+        age: '#EC4899',
+        percentage: '#06B6D4',
+    },
 };
 
 export const Radii = {
@@ -44,10 +71,12 @@ export const Spacing = {
 };
 
 export const FontSize = {
-    xs: 12,
+    xs: 11,
     sm: 13,
     md: 14,
+    body: 15,
     lg: 18,
     xl: 20,
+    xxl: 24,
     display: 48,
 };

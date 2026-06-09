@@ -6,6 +6,9 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import StandardScreen from './src/screens/StandardScreen';
 import ScientificScreen from './src/screens/ScientificScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
+import GoldSilverScreen from './src/screens/GoldSilverScreen';
+import InstagramTrackerScreen from './src/screens/InstagramTrackerScreen';
+import ToolsScreen from './src/screens/ToolsScreen';
 import { Colors, FontSize } from './src/config/theme';
 
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
@@ -14,12 +17,15 @@ const ROUTES = [
     { key: 'standard',   title: 'Standard' },
     { key: 'scientific', title: 'Scientific' },
     { key: 'history',    title: 'History' },
+    { key: 'metals',     title: 'Metals' },
+    { key: 'tracker',    title: 'Tracker' },
+    { key: 'tools',      title: 'Tools' },
 ] as const;
 
 type RouteKey = typeof ROUTES[number]['key'];
 
 export default function App() {
-    const standardCalc = useCalculator('calc_history_standard_v1');
+    const standardCalc  = useCalculator('calc_history_standard_v1');
     const scientificCalc = useCalculator('calc_history_scientific_v1');
     const [index, setIndex] = React.useState(0);
 
@@ -44,8 +50,6 @@ export default function App() {
         scientificCalc.clearHistory();
     }, [standardCalc.clearHistory, scientificCalc.clearHistory]);
 
-    // Stable reference — recreating renderScene on every keystroke causes
-    // TabView to unmount/remount all scenes mid-interaction on Android.
     const renderScene = React.useCallback(
         ({ route }: { route: { key: string } }) => {
             try {
@@ -80,6 +84,24 @@ export default function App() {
                                 />
                             </ErrorBoundary>
                         );
+                    case 'metals':
+                        return (
+                            <ErrorBoundary>
+                                <GoldSilverScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'tracker':
+                        return (
+                            <ErrorBoundary>
+                                <InstagramTrackerScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'tools':
+                        return (
+                            <ErrorBoundary>
+                                <ToolsScreen />
+                            </ErrorBoundary>
+                        );
                     default:
                         return null;
                 }
@@ -107,11 +129,13 @@ export default function App() {
                     renderTabBar={props => (
                         <TabBar
                             {...props}
+                            scrollEnabled
                             indicatorStyle={styles.indicator}
                             style={styles.tabBar}
                             activeColor={Colors.accent}
                             inactiveColor={Colors.text.secondary}
                             labelStyle={styles.tabLabel}
+                            tabStyle={styles.tabItem}
                         />
                     )}
                 />
@@ -130,9 +154,14 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: Colors.tabBarBorder,
     },
+    tabItem: {
+        width: 'auto',
+        paddingHorizontal: 14,
+        minWidth: 80,
+    },
     indicator: {
         backgroundColor: Colors.accent,
-        height: 4,
+        height: 3,
     },
     tabLabel: {
         fontSize: FontSize.sm,
