@@ -20,7 +20,6 @@ type Props = {
     variant?: ButtonVariant;
 };
 
-// Fire-and-forget — never awaited so it never produces an unhandled rejection
 function fireHaptic(): void {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -28,77 +27,45 @@ function fireHaptic(): void {
 
 export default function Button({ label, onPress, variant = 'number' }: Props) {
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
-    const shadowAnim = React.useRef(new Animated.Value(0)).current;
 
-    // Synchronous — no async/await so Android/Hermes can't produce an
-    // unhandled rejection from this event handler
     const handlePressIn = () => {
         fireHaptic();
-        Animated.parallel([
-            Animated.spring(scaleAnim, {
-                toValue: 0.92,
-                useNativeDriver: true,
-                friction: 5,
-                tension: 40,
-            }),
-            Animated.timing(shadowAnim, {
-                toValue: 1,
-                duration: 150,
-                useNativeDriver: false,
-            }),
-        ]).start();
+        // useNativeDriver: true only — mixing true/false in Animated.parallel
+        // crashes Android. Shadow is static (elevation on Android, shadowXxx on iOS).
+        Animated.spring(scaleAnim, {
+            toValue: 0.92,
+            useNativeDriver: true,
+            friction: 5,
+            tension: 40,
+        }).start();
     };
 
     const handlePressOut = () => {
-        Animated.parallel([
-            Animated.spring(scaleAnim, {
-                toValue: 1,
-                useNativeDriver: true,
-                friction: 5,
-                tension: 40,
-            }),
-            Animated.timing(shadowAnim, {
-                toValue: 0,
-                duration: 150,
-                useNativeDriver: false,
-            }),
-        ]).start();
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            friction: 5,
+            tension: 40,
+        }).start();
     };
-
-    const shadowOpacity = shadowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.3, 0.6],
-    });
-
-    const shadowRadius = shadowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [8, 12],
-    });
 
     const handlePress = () => {
         try {
-            // onPress may return a Promise (e.g. evaluateExpression).
-            // Attaching .catch() prevents Hermes from treating it as an
-            // unhandled rejection and terminating the app.
             const result = onPress() as unknown;
+            // evaluateExpression is async — catch its rejection so Hermes
+            // does not terminate the app for an unhandled promise rejection
             if (result instanceof Promise) {
                 result.catch(() => {});
             }
         } catch {
-            // swallow any synchronous errors too
+            // swallow any synchronous errors
         }
     };
 
     return (
         <View style={styles.container}>
-            {/* Animated.View must NOT have both elevation and overflow:hidden
-                on Android — that combination crashes the native renderer.
-                Shadow lives here; clipping lives on the inner Pressable. */}
             <Animated.View
-                style={[
-                    styles.animatedWrapper,
-                    { transform: [{ scale: scaleAnim }], shadowOpacity, shadowRadius },
-                ]}
+                style={[styles.shadow, { transform: [{ scale: scaleAnim }] }]}
             >
                 <Pressable
                     style={[styles.button, { backgroundColor: VARIANT_COLORS[variant] }]}
@@ -118,14 +85,17 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    animatedWrapper: {
+    shadow: {
         flex: 1,
         borderRadius: 10,
+        // Android depth — static, no animation
+        elevation: 3,
+        // iOS depth — static, no animation (shadowXxx cannot be mixed with
+        // useNativeDriver:true so they must never be animated)
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        elevation: 3,
-        // overflow:hidden removed — combining it with elevation on Android
-        // causes a native crash on many devices
+        shadowOpacity: 0.35,
+        shadowRadius: 4,
     },
     button: {
         flex: 1,
@@ -135,7 +105,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        overflow: 'hidden', // clipping now lives here, away from elevation
+        overflow: 'hidden',
     },
     label: {
         color: Colors.text.white,
