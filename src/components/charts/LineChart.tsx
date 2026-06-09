@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Colors, FontSize } from '../../config/theme';
 import type { ChartDataPoint } from './BarChart';
 
@@ -7,14 +7,18 @@ type Props = {
     data: ChartDataPoint[];
     color?: string;
     height?: number;
+    selectedIndex?: number;
+    onPointPress?: (point: ChartDataPoint, index: number) => void;
 };
 
-type Point = { x: number; y: number; label: string; value: number };
+type Point = { x: number; y: number; label: string; value: number; index: number };
 
 export default function LineChart({
     data,
     color = Colors.chart.green,
     height = 180,
+    selectedIndex,
+    onPointPress,
 }: Props) {
     const [containerWidth, setContainerWidth] = React.useState(0);
 
@@ -27,55 +31,46 @@ export default function LineChart({
     }
 
     const LABEL_AREA = 24;
-    const chartH = height - LABEL_AREA;
-    const PAD_V = 12;
-    const PAD_H = 8;
-    const drawH = chartH - PAD_V * 2;
+    const chartH  = height - LABEL_AREA;
+    const PAD_V   = 12;
+    const PAD_H   = 8;
+    const drawH   = chartH - PAD_V * 2;
 
-    const values = data.map(d => d.value);
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
-    const range = maxVal - minVal || 1;
+    const values  = data.map(d => d.value);
+    const minVal  = Math.min(...values);
+    const maxVal  = Math.max(...values);
+    const range   = maxVal - minVal || 1;
 
     let points: Point[] = [];
     if (containerWidth > 0 && data.length >= 2) {
         const drawW = containerWidth - PAD_H * 2;
         points = data.map((d, i) => ({
-            x: PAD_H + (i / (data.length - 1)) * drawW,
-            y: PAD_V + (1 - (d.value - minVal) / range) * drawH,
+            x:     PAD_H + (i / (data.length - 1)) * drawW,
+            y:     PAD_V + (1 - (d.value - minVal) / range) * drawH,
             label: d.label,
             value: d.value,
+            index: i,
         }));
     } else if (containerWidth > 0 && data.length === 1) {
         const drawW = containerWidth - PAD_H * 2;
-        points = [{
-            x: PAD_H + drawW / 2,
-            y: PAD_V + drawH / 2,
-            label: data[0].label,
-            value: data[0].value,
-        }];
+        points = [{ x: PAD_H + drawW / 2, y: PAD_V + drawH / 2, label: data[0].label, value: data[0].value, index: 0 }];
     }
 
-    // Build line segments between consecutive points
     const segments = points.slice(0, -1).map((p, i) => {
-        const next = points[i + 1];
-        const dx = next.x - p.x;
-        const dy = next.y - p.y;
+        const next   = points[i + 1];
+        const dx     = next.x - p.x;
+        const dy     = next.y - p.y;
         const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        return {
-            cx: (p.x + next.x) / 2,
-            cy: (p.y + next.y) / 2,
-            length,
-            angle,
-        };
+        const angle  = Math.atan2(dy, dx) * (180 / Math.PI);
+        return { cx: (p.x + next.x) / 2, cy: (p.y + next.y) / 2, length, angle };
     });
 
-    // Build grid lines (3 horizontal guides)
     const gridLines = [0.25, 0.5, 0.75].map(f => ({
         y: PAD_V + f * drawH,
         value: maxVal - f * range,
     }));
+
+    const HIT = 20; // pressable hit area radius
 
     return (
         <View style={{ height }}>
@@ -87,10 +82,7 @@ export default function LineChart({
                     <View style={StyleSheet.absoluteFill}>
                         {/* grid lines */}
                         {gridLines.map((g, i) => (
-                            <View
-                                key={i}
-                                style={[styles.gridLine, { top: g.y }]}
-                            />
+                            <View key={i} style={[styles.gridLine, { top: g.y }]} />
                         ))}
 
                         {/* line segments */}
@@ -106,32 +98,44 @@ export default function LineChart({
                                     top: seg.cy - 1,
                                     transform: [{ rotate: `${seg.angle}deg` }],
                                     borderRadius: 1,
+                                    opacity: 0.75,
                                 }}
                             />
                         ))}
 
-                        {/* data point dots */}
-                        {points.map((p, i) => (
-                            <View
-                                key={i}
-                                style={{
-                                    position: 'absolute',
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 4,
-                                    backgroundColor: color,
-                                    borderWidth: 2,
-                                    borderColor: Colors.background,
-                                    left: p.x - 4,
-                                    top: p.y - 4,
-                                }}
-                            />
-                        ))}
+                        {/* data point dots — pressable with hit slop */}
+                        {points.map((p, i) => {
+                            const selected = selectedIndex === i;
+                            const DOT = selected ? 12 : 8;
+                            return (
+                                <Pressable
+                                    key={i}
+                                    onPress={() => onPointPress?.(data[i], i)}
+                                    hitSlop={{ top: HIT, bottom: HIT, left: HIT, right: HIT }}
+                                    style={{
+                                        position: 'absolute',
+                                        left: p.x - DOT / 2,
+                                        top: p.y - DOT / 2,
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            width: DOT,
+                                            height: DOT,
+                                            borderRadius: DOT / 2,
+                                            backgroundColor: selected ? Colors.text.white : color,
+                                            borderWidth: selected ? 3 : 2,
+                                            borderColor: selected ? color : Colors.background,
+                                        }}
+                                    />
+                                </Pressable>
+                            );
+                        })}
                     </View>
                 )}
             </View>
 
-            {/* x-axis labels — only first, middle, last */}
+            {/* x-axis labels — first, middle, last */}
             <View style={styles.labelsRow}>
                 {data.length > 0 && (
                     <>

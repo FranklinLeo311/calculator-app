@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Colors, FontSize, Spacing } from '../../config/theme';
 
 export type ChartDataPoint = {
     label: string;
     value: number;
+    extra?: Record<string, number>; // additional values shown in tooltip
 };
 
 type Props = {
@@ -12,6 +13,8 @@ type Props = {
     color?: string;
     height?: number;
     showValues?: boolean;
+    selectedIndex?: number;
+    onPointPress?: (point: ChartDataPoint, index: number) => void;
 };
 
 export default function BarChart({
@@ -19,6 +22,8 @@ export default function BarChart({
     color = Colors.chart.green,
     height = 180,
     showValues = true,
+    selectedIndex,
+    onPointPress,
 }: Props) {
     if (data.length === 0) {
         return (
@@ -28,10 +33,9 @@ export default function BarChart({
         );
     }
 
-    const values = data.map(d => d.value);
-    const maxVal = Math.max(...values, 1);
-
-    const BAR_AREA = height - 48; // reserve space for labels + value text
+    const values  = data.map(d => d.value);
+    const maxVal  = Math.max(...values, 1);
+    const BAR_AREA = height - 48;
 
     return (
         <ScrollView
@@ -40,12 +44,20 @@ export default function BarChart({
             contentContainerStyle={styles.scrollContent}
         >
             {data.map((d, i) => {
-                const barH = Math.max(4, (d.value / maxVal) * BAR_AREA);
+                const barH    = Math.max(4, (d.value / maxVal) * BAR_AREA);
+                const selected = selectedIndex === i;
                 return (
-                    <View key={i} style={styles.column}>
+                    <Pressable
+                        key={i}
+                        onPress={() => onPointPress?.(d, i)}
+                        style={styles.column}
+                    >
                         {showValues ? (
-                            <Text style={[styles.valueText, { color }]} numberOfLines={1}>
-                                {d.value}
+                            <Text
+                                style={[styles.valueText, { color: selected ? Colors.text.white : color }]}
+                                numberOfLines={1}
+                            >
+                                {d.value.toLocaleString('en-IN')}
                             </Text>
                         ) : null}
                         <View style={styles.barWrapper}>
@@ -55,13 +67,20 @@ export default function BarChart({
                                     {
                                         height: barH,
                                         backgroundColor: color,
-                                        opacity: 0.85 + (i / data.length) * 0.15,
+                                        opacity: selected ? 1 : 0.75,
+                                        borderWidth: selected ? 2 : 0,
+                                        borderColor: Colors.text.white,
                                     },
                                 ]}
                             />
                         </View>
-                        <Text style={styles.labelText} numberOfLines={1}>{d.label}</Text>
-                    </View>
+                        <Text
+                            style={[styles.labelText, selected && { color: Colors.text.primary }]}
+                            numberOfLines={1}
+                        >
+                            {d.label}
+                        </Text>
+                    </Pressable>
                 );
             })}
         </ScrollView>

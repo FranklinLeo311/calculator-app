@@ -9,17 +9,21 @@ import HistoryScreen from './src/screens/HistoryScreen';
 import GoldSilverScreen from './src/screens/GoldSilverScreen';
 import InstagramTrackerScreen from './src/screens/InstagramTrackerScreen';
 import ToolsScreen from './src/screens/ToolsScreen';
+import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
+import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
 import { Colors, FontSize } from './src/config/theme';
 
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
 
 const ROUTES = [
-    { key: 'standard', title: 'Standard' },
-    { key: 'scientific', title: 'Scientific' },
-    { key: 'history', title: 'History' },
-    { key: 'metals', title: 'Metals' },
-    { key: 'tracker', title: 'Tracker' },
-    { key: 'tools', title: 'Tools' },
+    { key: 'standard',  title: 'Standard'  },
+    { key: 'scientific',title: 'Scientific' },
+    { key: 'history',   title: 'History'   },
+    { key: 'metals',    title: 'Metals'    },
+    { key: 'tracker',   title: 'Tracker'   },
+    { key: 'tools',     title: 'Tools'     },
+    { key: 'passwords', title: '🔐 Vault'  },
+    { key: 'documents', title: '📁 Docs'   },
 ] as const;
 
 type RouteKey = typeof ROUTES[number]['key'];
@@ -100,6 +104,18 @@ export default function App() {
                         return (
                             <ErrorBoundary>
                                 <ToolsScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'passwords':
+                        return (
+                            <ErrorBoundary>
+                                <PasswordManagerScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'documents':
+                        return (
+                            <ErrorBoundary>
+                                <DocumentManagerScreen />
                             </ErrorBoundary>
                         );
                     default:
