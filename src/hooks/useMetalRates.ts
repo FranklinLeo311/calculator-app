@@ -15,32 +15,49 @@ export type MetalRates = {
 
 type Cache = MetalRates & { fetchedAt: number };
 
-// Frankfurter gives free USD/INR conversion.
-// metals.live gives USD spot prices for XAU and XAG.
-const EXCHANGE_URL = 'https://api.frankfurter.app/latest?from=USD&to=INR';
-const METALS_URL   = 'https://metals.live/api/spot';
+// fawazahmed0/currency-api via jsDelivr CDN:
+//   - Always CORS-enabled (CDN serves Access-Control-Allow-Origin: *)
+//   - Works on web AND native — no separate CORS handling needed
+//   - XAU / XAG are troy-ounce spot prices in INR, updated daily
+//   - Fallback mirror on pages.dev if jsDelivr is down
+const CDN = 'https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@1/latest/currencies';
+const MIRROR = 'https://latest.currency-api.pages.dev/v1/currencies';
+
+type MetalJson = { xau?: { inr: number }; xag?: { inr: number } };
+
+async function fetchFromCdn<T>(path: string): Promise<T> {
+    try {
+        return await fetchJson<T>(`${CDN}/${path}`);
+    } catch {
+        return await fetchJson<T>(`${MIRROR}/${path}`);
+    }
+}
+
+const TROY_GRAMS = 31.1035;
 
 async function fetchRates(): Promise<MetalRates> {
-    const [exRes, metRes] = await Promise.all([
-        fetchJson<{ rates: { INR: number } }>(EXCHANGE_URL),
-        fetchJson<Array<Record<string, number>>>(METALS_URL),
+    const [xauData, xagData, exData] = await Promise.all([
+        fetchFromCdn<MetalJson>('xau/inr.json'),
+        fetchFromCdn<MetalJson>('xag/inr.json'),
+        fetchJson<{ rates: { INR: number } }>('https://api.frankfurter.app/latest?from=USD&to=INR'),
     ]);
 
-    const usdInr = exRes.rates.INR;
-    const spot   = metRes[0] ?? {};
-    const xauUsd = spot['XAU'] ?? spot['xau'] ?? 2350; // troy ounce
-    const xagUsd = spot['XAG'] ?? spot['xag'] ?? 28;
+    // xauData.xau.inr = price of 1 troy ounce of gold in INR
+    const xauInr = xauData?.xau?.inr ?? 0;
+    const xagInr = xagData?.xag?.inr ?? 0;
 
-    const TROY_GRAMS = 31.1035;
-    const gold24kPerGram = (xauUsd / TROY_GRAMS) * usdInr;
+    if (!xauInr) throw new Error('Gold rate unavailable');
+
+    const gold24kPerGram = xauInr / TROY_GRAMS;
     const gold22kPerGram = gold24kPerGram * (22 / 24);
-    const silverPerGram  = (xagUsd / TROY_GRAMS) * usdInr;
+    const silverPerGram  = xagInr / TROY_GRAMS;
+    const usdInr         = exData.rates.INR;
 
     return {
-        gold24k: Math.round(gold24kPerGram),
-        gold22k: Math.round(gold22kPerGram),
-        silver:  Math.round(silverPerGram * 100) / 100,
-        usdInr:  Math.round(usdInr * 100) / 100,
+        gold24k:   Math.round(gold24kPerGram),
+        gold22k:   Math.round(gold22kPerGram),
+        silver:    Math.round(silverPerGram * 100) / 100,
+        usdInr:    Math.round(usdInr * 100) / 100,
         updatedAt: Date.now(),
     };
 }
