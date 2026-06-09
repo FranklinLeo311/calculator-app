@@ -6,8 +6,9 @@ const MAX_ENTRIES = 365;
 
 export type TrackerEntry = {
     id: string;
-    date: string;   // YYYY-MM-DD
-    count: number;
+    date: string;      // YYYY-MM-DD
+    count: number;     // videos / reels watched
+    minutes: number;   // time spent in minutes
 };
 
 function todayStr(): string {
@@ -35,16 +36,16 @@ export default function useVideoTracker() {
         await storageSet(STORAGE_KEY, items);
     }, []);
 
-    const addEntry = useCallback(async (date: string, count: number) => {
+    const addEntry = useCallback(async (date: string, count: number, minutes: number) => {
         try {
-            if (!date || count < 0) return;
+            if (!date) return;
             setEntries(prev => {
-                // Replace existing entry for that date, or prepend
                 const filtered = prev.filter(e => e.date !== date);
                 const newEntry: TrackerEntry = {
-                    id: `${date}-${count}`,
+                    id: `${date}-${count}-${minutes}`,
                     date,
                     count,
+                    minutes,
                 };
                 const updated = [newEntry, ...filtered]
                     .sort((a, b) => b.date.localeCompare(a.date))
@@ -77,15 +78,21 @@ export default function useVideoTracker() {
         }
     }, [persist]);
 
-    // Last 30 days sorted oldest-first for chart
-    const chartData = entries
+    // Last 30 days sorted oldest-first for chart — caller picks metric
+    const chartDataCount = entries
         .slice(0, 30)
         .reverse()
         .map(e => ({ label: formatDateLabel(e.date), value: e.count }));
 
+    const chartDataMinutes = entries
+        .slice(0, 30)
+        .reverse()
+        .map(e => ({ label: formatDateLabel(e.date), value: e.minutes }));
+
     return {
         entries,
-        chartData,
+        chartDataCount,
+        chartDataMinutes,
         todayStr,
         addEntry,
         deleteEntry,

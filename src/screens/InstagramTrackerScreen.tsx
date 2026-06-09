@@ -8,6 +8,8 @@ import {
     StyleSheet,
     Alert,
     Platform,
+    LayoutAnimation,
+    UIManager,
 } from 'react-native';
 import GradientBackground from '../components/GradientBackground';
 import BarChart from '../components/charts/BarChart';
@@ -17,25 +19,54 @@ import useVideoTracker from '../hooks/useVideoTracker';
 import { Colors, FontSize, Spacing, Radii } from '../config/theme';
 import type { ChartType } from '../components/ChartSettingsBar';
 
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+type Metric = 'videos' | 'time';
+
 function todayDateStr(): string {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function InstagramTrackerScreen() {
-    const { entries, chartData, addEntry, deleteEntry, clearAll } = useVideoTracker();
+// ─── How-to guide steps ───────────────────────────────────────────────────────
+const STEPS = [
+    { icon: '1️⃣', text: 'Open the Instagram app on your phone.' },
+    { icon: '2️⃣', text: 'Tap your Profile picture (bottom-right corner).' },
+    { icon: '3️⃣', text: 'Tap the ☰ menu icon (top-right corner).' },
+    { icon: '4️⃣', text: 'Tap "Your Activity" from the menu.' },
+    { icon: '5️⃣', text: 'Tap "Time Spent" to see minutes per day.' },
+    { icon: '6️⃣', text: 'Tap "Videos Watched" to see your reel count.' },
+    { icon: '📝', text: 'Come back here and log the numbers below.' },
+];
 
-    const [date, setDate]   = React.useState(todayDateStr());
-    const [count, setCount] = React.useState('');
+export default function InstagramTrackerScreen() {
+    const { entries, chartDataCount, chartDataMinutes, addEntry, deleteEntry, clearAll } =
+        useVideoTracker();
+
+    const [date, setDate]     = React.useState(todayDateStr());
+    const [videos, setVideos] = React.useState('');
+    const [minutes, setMinutes] = React.useState('');
+    const [guideOpen, setGuideOpen] = React.useState(true);
+    const [metric, setMetric] = React.useState<Metric>('videos');
     const [chartType, setChartType]   = React.useState<ChartType>('bar');
     const [chartColor, setChartColor] = React.useState(Colors.chart.pink);
 
+    const toggleGuide = () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setGuideOpen(v => !v);
+    };
+
     const handleAdd = () => {
         try {
-            const n = parseInt(count, 10);
-            if (!count || isNaN(n) || n < 0) return;
-            addEntry(date, n);
-            setCount('');
+            const v = parseInt(videos, 10)   || 0;
+            const m = parseInt(minutes, 10)  || 0;
+            if (!date || (v === 0 && m === 0)) return;
+            addEntry(date, v, m);
+            setVideos('');
+            setMinutes('');
             setDate(todayDateStr());
         } catch {
             // ignore
@@ -43,10 +74,7 @@ export default function InstagramTrackerScreen() {
     };
 
     const handleDelete = (id: string) => {
-        if (Platform.OS === 'web') {
-            deleteEntry(id);
-            return;
-        }
+        if (Platform.OS === 'web') { deleteEntry(id); return; }
         Alert.alert('Delete entry?', '', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Delete', style: 'destructive', onPress: () => deleteEntry(id) },
@@ -54,17 +82,18 @@ export default function InstagramTrackerScreen() {
     };
 
     const handleClear = () => {
-        if (Platform.OS === 'web') {
-            clearAll();
-            return;
-        }
+        if (Platform.OS === 'web') { clearAll(); return; }
         Alert.alert('Clear all entries?', 'This cannot be undone.', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Clear all', style: 'destructive', onPress: clearAll },
         ]);
     };
 
-    const total = entries.reduce((s, e) => s + e.count, 0);
+    const totalVideos  = entries.reduce((s, e) => s + (e.count   ?? 0), 0);
+    const totalMinutes = entries.reduce((s, e) => s + (e.minutes ?? 0), 0);
+    const avgVideos    = entries.length ? Math.round(totalVideos  / entries.length) : 0;
+    const avgMinutes   = entries.length ? Math.round(totalMinutes / entries.length) : 0;
+    const chartData    = metric === 'videos' ? chartDataCount : chartDataMinutes;
 
     return (
         <GradientBackground>
@@ -76,8 +105,8 @@ export default function InstagramTrackerScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.headerTitle}>Reel Tracker</Text>
-                        <Text style={styles.headerSub}>Daily Instagram scroll count</Text>
+                        <Text style={styles.headerTitle}>Instagram Tracker</Text>
+                        <Text style={styles.headerSub}>Log from Instagram → Your Activity</Text>
                     </View>
                     {entries.length > 0 && (
                         <Pressable
@@ -89,60 +118,132 @@ export default function InstagramTrackerScreen() {
                     )}
                 </View>
 
-                {/* Stats row */}
+                {/* ── Guide ──────────────────────────────────────────── */}
+                <View style={styles.guideCard}>
+                    <Pressable onPress={toggleGuide} style={styles.guideHeader}>
+                        <View style={styles.guideHeaderLeft}>
+                            <Text style={styles.guideIcon}>📍</Text>
+                            <Text style={styles.guideTitle}>How to find your stats in Instagram</Text>
+                        </View>
+                        <Text style={[styles.guideChevron, { color: Colors.chart.pink }]}>
+                            {guideOpen ? '▲' : '▼'}
+                        </Text>
+                    </Pressable>
+
+                    {guideOpen && (
+                        <View style={styles.guideBody}>
+                            {STEPS.map((step, i) => (
+                                <View key={i} style={styles.stepRow}>
+                                    <Text style={styles.stepIcon}>{step.icon}</Text>
+                                    <Text style={styles.stepText}>{step.text}</Text>
+                                </View>
+                            ))}
+                            <View style={styles.tipBox}>
+                                <Text style={styles.tipText}>
+                                    💡 Instagram resets the "Videos Watched" counter daily at midnight. Log it before you sleep for accurate numbers.
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* ── Stats row ─────────────────────────────────────── */}
                 <View style={styles.statsRow}>
                     <View style={styles.statCard}>
                         <Text style={[styles.statValue, { color: Colors.chart.pink }]}>
                             {entries.length}
                         </Text>
-                        <Text style={styles.statLabel}>Days tracked</Text>
+                        <Text style={styles.statLabel}>Days logged</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={[styles.statValue, { color: Colors.chart.pink }]}>
-                            {total.toLocaleString()}
+                            {avgVideos}
                         </Text>
-                        <Text style={styles.statLabel}>Total reels</Text>
+                        <Text style={styles.statLabel}>Avg videos/day</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={[styles.statValue, { color: Colors.chart.pink }]}>
-                            {entries.length > 0 ? Math.round(total / entries.length) : 0}
+                            {avgMinutes}
                         </Text>
-                        <Text style={styles.statLabel}>Daily avg</Text>
+                        <Text style={styles.statLabel}>Avg min/day</Text>
                     </View>
                 </View>
 
-                {/* Add entry */}
-                <View style={styles.addCard}>
-                    <Text style={styles.addTitle}>Log today's count</Text>
-                    <View style={styles.addRow}>
+                {/* ── Log entry form ────────────────────────────────── */}
+                <View style={styles.logCard}>
+                    <Text style={styles.logTitle}>Log today's data</Text>
+
+                    <View style={styles.logDateRow}>
+                        <Text style={styles.logFieldLabel}>Date</Text>
                         <TextInput
-                            style={styles.dateInput}
+                            style={styles.logDateInput}
                             value={date}
                             onChangeText={setDate}
                             placeholder="YYYY-MM-DD"
                             placeholderTextColor={Colors.text.muted}
                         />
-                        <TextInput
-                            style={styles.countInput}
-                            value={count}
-                            onChangeText={setCount}
-                            placeholder="Count"
-                            placeholderTextColor={Colors.text.muted}
-                            keyboardType="number-pad"
-                        />
-                        <Pressable
-                            onPress={handleAdd}
-                            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-                        >
-                            <Text style={styles.addBtnText}>+ Add</Text>
-                        </Pressable>
                     </View>
+
+                    <View style={styles.logInputsRow}>
+                        <View style={styles.logInputBox}>
+                            <Text style={styles.logFieldLabel}>📹 Videos Watched</Text>
+                            <TextInput
+                                style={styles.logInput}
+                                value={videos}
+                                onChangeText={setVideos}
+                                placeholder="From Instagram"
+                                placeholderTextColor={Colors.text.muted}
+                                keyboardType="number-pad"
+                            />
+                            <Text style={styles.logHint}>Instagram → Your Activity → Videos Watched</Text>
+                        </View>
+                        <View style={styles.logInputBox}>
+                            <Text style={styles.logFieldLabel}>⏱ Time Spent (min)</Text>
+                            <TextInput
+                                style={styles.logInput}
+                                value={minutes}
+                                onChangeText={setMinutes}
+                                placeholder="Minutes"
+                                placeholderTextColor={Colors.text.muted}
+                                keyboardType="number-pad"
+                            />
+                            <Text style={styles.logHint}>Instagram → Your Activity → Time Spent</Text>
+                        </View>
+                    </View>
+
+                    <Pressable
+                        onPress={handleAdd}
+                        style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.7 }]}
+                    >
+                        <Text style={styles.saveBtnText}>Save Entry</Text>
+                    </Pressable>
                 </View>
 
-                {/* Chart */}
+                {/* ── Chart ─────────────────────────────────────────── */}
                 {chartData.length > 0 && (
                     <View style={styles.chartSection}>
-                        <Text style={styles.sectionTitle}>Trend (last {chartData.length} days)</Text>
+                        {/* Metric toggle */}
+                        <View style={styles.metricRow}>
+                            {(['videos', 'time'] as Metric[]).map(m => (
+                                <Pressable
+                                    key={m}
+                                    onPress={() => setMetric(m)}
+                                    style={[
+                                        styles.metricBtn,
+                                        metric === m && { backgroundColor: chartColor + '25', borderColor: chartColor },
+                                    ]}
+                                >
+                                    <Text style={[styles.metricBtnText, metric === m && { color: chartColor }]}>
+                                        {m === 'videos' ? '📹 Videos' : '⏱ Time (min)'}
+                                    </Text>
+                                </Pressable>
+                            ))}
+                        </View>
+
+                        <Text style={styles.sectionTitle}>
+                            {metric === 'videos' ? 'Videos Watched' : 'Time Spent (min)'} — last {chartData.length} days
+                        </Text>
+
                         <ChartSettingsBar
                             chartType={chartType}
                             onChartTypeChange={setChartType}
@@ -158,16 +259,21 @@ export default function InstagramTrackerScreen() {
                     </View>
                 )}
 
-                {/* History list */}
+                {/* ── History list ──────────────────────────────────── */}
                 {entries.length > 0 && (
                     <View style={styles.listSection}>
                         <Text style={styles.sectionTitle}>History</Text>
                         {entries.map(e => (
                             <View key={e.id} style={styles.entryRow}>
                                 <Text style={styles.entryDate}>{e.date}</Text>
-                                <Text style={[styles.entryCount, { color: chartColor }]}>
-                                    {e.count.toLocaleString()}
-                                </Text>
+                                <View style={styles.entryMetrics}>
+                                    <Text style={[styles.entryVideos, { color: chartColor }]}>
+                                        📹 {(e.count ?? 0).toLocaleString()}
+                                    </Text>
+                                    <Text style={styles.entryMinutes}>
+                                        ⏱ {(e.minutes ?? 0)}m
+                                    </Text>
+                                </View>
                                 <Pressable
                                     onPress={() => handleDelete(e.id)}
                                     style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.5 }]}
@@ -181,7 +287,10 @@ export default function InstagramTrackerScreen() {
 
                 {entries.length === 0 && (
                     <View style={styles.emptyBox}>
-                        <Text style={styles.emptyText}>No entries yet. Add your first count above!</Text>
+                        <Text style={styles.emptyEmoji}>📊</Text>
+                        <Text style={styles.emptyText}>
+                            Follow the guide above, then log your first entry.
+                        </Text>
                     </View>
                 )}
             </ScrollView>
@@ -221,6 +330,74 @@ const styles = StyleSheet.create({
         fontSize: FontSize.sm,
         fontWeight: '600',
     },
+
+    // Guide
+    guideCard: {
+        backgroundColor: Colors.card,
+        borderRadius: Radii.lg,
+        borderWidth: 1,
+        borderColor: Colors.chart.pink + '40',
+        marginBottom: Spacing.xl,
+        overflow: 'hidden',
+    },
+    guideHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: Spacing.lg,
+    },
+    guideHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: Spacing.sm,
+    },
+    guideIcon: { fontSize: 16 },
+    guideTitle: {
+        color: Colors.text.primary,
+        fontSize: FontSize.sm,
+        fontWeight: '700',
+        flex: 1,
+    },
+    guideChevron: {
+        fontSize: FontSize.xs,
+        fontWeight: '700',
+    },
+    guideBody: {
+        paddingHorizontal: Spacing.lg,
+        paddingBottom: Spacing.lg,
+        borderTopWidth: 1,
+        borderTopColor: Colors.divider,
+        gap: Spacing.md,
+    },
+    stepRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: Spacing.md,
+        marginTop: Spacing.md,
+    },
+    stepIcon: { fontSize: 16, width: 26 },
+    stepText: {
+        flex: 1,
+        color: Colors.text.secondary,
+        fontSize: FontSize.sm,
+        lineHeight: 20,
+    },
+    tipBox: {
+        backgroundColor: Colors.chart.pink + '12',
+        borderRadius: Radii.md,
+        borderWidth: 1,
+        borderColor: Colors.chart.pink + '30',
+        padding: Spacing.md,
+        marginTop: Spacing.md,
+    },
+    tipText: {
+        color: Colors.text.secondary,
+        fontSize: FontSize.xs,
+        lineHeight: 18,
+    },
+
+    // Stats
     statsRow: {
         flexDirection: 'row',
         gap: Spacing.md,
@@ -245,7 +422,9 @@ const styles = StyleSheet.create({
         marginTop: 2,
         textAlign: 'center',
     },
-    addCard: {
+
+    // Log form
+    logCard: {
         backgroundColor: Colors.card,
         borderRadius: Radii.lg,
         borderWidth: 1,
@@ -253,21 +432,24 @@ const styles = StyleSheet.create({
         padding: Spacing.lg,
         marginBottom: Spacing.xl,
     },
-    addTitle: {
+    logTitle: {
+        color: Colors.text.primary,
+        fontSize: FontSize.body,
+        fontWeight: '700',
+        marginBottom: Spacing.lg,
+    },
+    logDateRow: {
+        marginBottom: Spacing.lg,
+    },
+    logFieldLabel: {
         color: Colors.text.secondary,
-        fontSize: FontSize.sm,
+        fontSize: FontSize.xs,
         fontWeight: '600',
         textTransform: 'uppercase',
-        letterSpacing: 0.8,
-        marginBottom: Spacing.md,
+        letterSpacing: 0.7,
+        marginBottom: Spacing.xs,
     },
-    addRow: {
-        flexDirection: 'row',
-        gap: Spacing.md,
-        alignItems: 'center',
-    },
-    dateInput: {
-        flex: 2,
+    logDateInput: {
         backgroundColor: Colors.input,
         borderRadius: Radii.md,
         borderWidth: 1,
@@ -277,39 +459,73 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.md,
         paddingVertical: Spacing.sm,
     },
-    countInput: {
+    logInputsRow: {
+        flexDirection: 'row',
+        gap: Spacing.md,
+        marginBottom: Spacing.lg,
+    },
+    logInputBox: {
         flex: 1,
+    },
+    logInput: {
         backgroundColor: Colors.input,
         borderRadius: Radii.md,
         borderWidth: 1,
         borderColor: Colors.inputBorder,
         color: Colors.text.primary,
-        fontSize: FontSize.sm,
+        fontSize: FontSize.body,
+        fontWeight: '600',
         paddingHorizontal: Spacing.md,
         paddingVertical: Spacing.sm,
         textAlign: 'center',
+        marginBottom: 4,
     },
-    addBtn: {
-        backgroundColor: Colors.chart.pink + '30',
+    logHint: {
+        color: Colors.text.muted,
+        fontSize: 10,
+        lineHeight: 13,
+    },
+    saveBtn: {
+        backgroundColor: Colors.chart.pink + '25',
         borderRadius: Radii.md,
         borderWidth: 1,
         borderColor: Colors.chart.pink + '60',
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.sm,
+        paddingVertical: Spacing.md,
+        alignItems: 'center',
     },
-    addBtnText: {
+    saveBtnText: {
         color: Colors.chart.pink,
-        fontSize: FontSize.sm,
+        fontSize: FontSize.body,
         fontWeight: '700',
     },
+
+    // Chart
     chartSection: {
         marginBottom: Spacing.xl,
+    },
+    metricRow: {
+        flexDirection: 'row',
+        gap: Spacing.md,
+        marginBottom: Spacing.lg,
+    },
+    metricBtn: {
+        flex: 1,
+        paddingVertical: Spacing.sm,
+        borderRadius: Radii.md,
+        borderWidth: 1,
+        borderColor: Colors.inputBorder,
+        alignItems: 'center',
+    },
+    metricBtnText: {
+        color: Colors.text.secondary,
+        fontSize: FontSize.sm,
+        fontWeight: '600',
     },
     sectionTitle: {
         color: Colors.text.primary,
         fontSize: FontSize.body,
         fontWeight: '700',
-        marginBottom: Spacing.lg,
+        marginBottom: Spacing.md,
     },
     chartBox: {
         backgroundColor: Colors.card,
@@ -318,6 +534,8 @@ const styles = StyleSheet.create({
         borderColor: Colors.cardBorder,
         padding: Spacing.lg,
     },
+
+    // History list
     listSection: {
         marginBottom: Spacing.xl,
     },
@@ -333,29 +551,37 @@ const styles = StyleSheet.create({
         marginBottom: Spacing.sm,
     },
     entryDate: {
-        flex: 1,
         color: Colors.text.secondary,
         fontSize: FontSize.sm,
+        width: 90,
     },
-    entryCount: {
-        fontSize: FontSize.body,
+    entryMetrics: {
+        flex: 1,
+        flexDirection: 'row',
+        gap: Spacing.lg,
+    },
+    entryVideos: {
+        fontSize: FontSize.sm,
         fontWeight: '700',
-        marginRight: Spacing.lg,
     },
-    deleteBtn: {
-        padding: Spacing.sm,
-    },
-    deleteText: {
+    entryMinutes: {
         color: Colors.text.muted,
         fontSize: FontSize.sm,
     },
+    deleteBtn: { padding: Spacing.sm },
+    deleteText: { color: Colors.text.muted, fontSize: FontSize.sm },
+
+    // Empty
     emptyBox: {
         paddingVertical: Spacing.xxxl,
         alignItems: 'center',
+        gap: Spacing.md,
     },
+    emptyEmoji: { fontSize: 40 },
     emptyText: {
         color: Colors.text.muted,
         fontSize: FontSize.sm,
         textAlign: 'center',
+        lineHeight: 20,
     },
 });
