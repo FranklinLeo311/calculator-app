@@ -151,15 +151,33 @@ export default function PasswordManagerScreen() {
                 <View style={styles.header}>
                     <View>
                         <Text style={styles.headerTitle}>🔐 Password Vault</Text>
-                        <Text style={styles.headerSub}>{credentials.length} saved credential{credentials.length !== 1 ? 's' : ''}</Text>
+                        <Text style={styles.headerSub}>{credentials.length} credential{credentials.length !== 1 ? 's' : ''} stored</Text>
                     </View>
                     <Pressable
                         onPress={() => { setEditTarget(null); setFormVisible(true); }}
                         style={styles.addBtn}
                     >
-                        <Text style={styles.addBtnText}>＋ Add</Text>
+                        <Text style={styles.addBtnText}>＋ Add New</Text>
                     </Pressable>
                 </View>
+
+                {/* Stats row */}
+                {credentials.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
+                        {CATEGORIES.map(cat => {
+                            const count = credentials.filter(c => c.category === cat).length;
+                            if (!count) return null;
+                            const color = CATEGORY_COLORS[cat];
+                            return (
+                                <Pressable key={cat} onPress={() => setFilterCat(cat)} style={[styles.statCard, { borderColor: color + '50' }]}>
+                                    <Text style={styles.statIcon}>{CATEGORY_ICONS[cat]}</Text>
+                                    <Text style={[styles.statCount, { color }]}>{count}</Text>
+                                    <Text style={styles.statLabel}>{cat}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
+                )}
 
                 {/* Search */}
                 <View style={styles.searchRow}>
@@ -260,6 +278,16 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
     },
     addBtnText: { color: Colors.text.white, fontWeight: '700', fontSize: FontSize.sm },
+
+    statsRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xl, marginBottom: Spacing.md, paddingBottom: 2 },
+    statCard: {
+        alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+        backgroundColor: Colors.card, borderRadius: Radii.lg,
+        borderWidth: 1, minWidth: 68,
+    },
+    statIcon:  { fontSize: 18, marginBottom: 2 },
+    statCount: { fontSize: FontSize.lg, fontWeight: '800' },
+    statLabel: { color: Colors.text.muted, fontSize: FontSize.xs },
 
     searchRow: {
         flexDirection: 'row', alignItems: 'center',

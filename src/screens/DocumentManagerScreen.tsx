@@ -2,7 +2,7 @@ import React from 'react';
 import {
     View, Text, ScrollView, Pressable, Modal, Image,
     StyleSheet, Alert, ActivityIndicator, TextInput,
-    FlatList, Dimensions,
+    FlatList,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
@@ -15,9 +15,6 @@ import {
     DOC_TYPES, DOC_ICONS, DOC_COLORS,
 } from '../utils/vaultUtils';
 import type { VaultDocument, DocType } from '../utils/vaultUtils';
-
-const { width: SCREEN_W } = Dimensions.get('window');
-const CARD_W = (SCREEN_W - Spacing.xl * 2 - Spacing.md) / 2;
 
 type AddState = { visible: boolean; name: string; docType: DocType };
 
@@ -221,18 +218,15 @@ export default function DocumentManagerScreen() {
                     <FlatList
                         data={filtered}
                         keyExtractor={d => d.id}
-                        numColumns={2}
-                        contentContainerStyle={styles.grid}
-                        columnWrapperStyle={styles.gridRow}
+                        contentContainerStyle={styles.list}
+                        showsVerticalScrollIndicator={false}
                         renderItem={({ item }) => (
-                            <View style={{ width: CARD_W }}>
-                                <DocumentCard
-                                    doc={item}
-                                    onView={() => setViewer(item)}
-                                    onShare={() => shareDocument(item)}
-                                    onDelete={() => deleteDocument(item)}
-                                />
-                            </View>
+                            <DocumentCard
+                                doc={item}
+                                onView={() => setViewer(item)}
+                                onShare={() => shareDocument(item)}
+                                onDelete={() => deleteDocument(item)}
+                            />
                         )}
                     />
                 )}
@@ -341,8 +335,7 @@ const styles = StyleSheet.create({
     filterIcon: { fontSize: 13 },
     filterLabel: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
 
-    grid: { paddingHorizontal: Spacing.xl, paddingBottom: 40 },
-    gridRow: { gap: Spacing.md, justifyContent: 'flex-start' },
+    list: { paddingHorizontal: Spacing.xl, paddingBottom: 40 },
 
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
     emptyIcon: { fontSize: 56, marginBottom: Spacing.lg },

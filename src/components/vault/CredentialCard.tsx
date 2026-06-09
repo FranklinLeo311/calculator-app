@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Colors, FontSize, Spacing, Radii } from '../../config/theme';
 import { CATEGORY_ICONS, CATEGORY_COLORS, decodePassword } from '../../utils/vaultUtils';
@@ -14,98 +14,95 @@ type Props = {
 export default function CredentialCard({ credential, onEdit, onDelete }: Props) {
     const [expanded,    setExpanded]    = React.useState(false);
     const [showPass,    setShowPass]    = React.useState(false);
-    const [copiedField, setCopiedField] = React.useState<string | null>(null);
+    const [copiedField, setCopiedField] = React.useState<'user' | 'pass' | null>(null);
 
-    const color = CATEGORY_COLORS[credential.category];
+    const color       = CATEGORY_COLORS[credential.category];
+    const rawPassword = decodePassword(credential.password);
 
-    async function copyText(text: string, field: string) {
+    async function copy(text: string, field: 'user' | 'pass') {
         await Clipboard.setStringAsync(text);
         setCopiedField(field);
         setTimeout(() => setCopiedField(null), 2000);
     }
 
-    const rawPassword = decodePassword(credential.password);
+    function confirmDelete() {
+        Alert.alert('Delete', `Remove "${credential.siteName}"?`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: onDelete },
+        ]);
+    }
+
+    function toggle() {
+        setExpanded(e => !e);
+        if (expanded) setShowPass(false);
+    }
 
     return (
-        <Pressable
-            onPress={() => { setExpanded(e => !e); setShowPass(false); }}
-            style={({ pressed }) => [styles.card, { borderLeftColor: color }, pressed && { opacity: 0.9 }]}
-        >
-            {/* Header row */}
-            <View style={styles.header}>
-                <View style={[styles.iconBadge, { backgroundColor: color + '25' }]}>
-                    <Text style={styles.icon}>{CATEGORY_ICONS[credential.category]}</Text>
+        <View style={[styles.card, { borderLeftColor: color }]}>
+            {/* ── Collapsed row (always visible) ── */}
+            <Pressable onPress={toggle} style={styles.row}>
+                <View style={[styles.iconCircle, { backgroundColor: color + '22' }]}>
+                    <Text style={styles.iconText}>{CATEGORY_ICONS[credential.category]}</Text>
                 </View>
-                <View style={styles.info}>
+                <View style={styles.rowInfo}>
                     <Text style={styles.siteName} numberOfLines={1}>{credential.siteName}</Text>
                     <Text style={styles.username} numberOfLines={1}>{credential.username}</Text>
                 </View>
-                <View style={[styles.categoryTag, { backgroundColor: color + '20' }]}>
-                    <Text style={[styles.categoryLabel, { color }]}>{credential.category}</Text>
+                <View style={[styles.catBadge, { backgroundColor: color + '18' }]}>
+                    <Text style={[styles.catText, { color }]}>{credential.category}</Text>
                 </View>
                 <Text style={styles.chevron}>{expanded ? '▲' : '▼'}</Text>
-            </View>
+            </Pressable>
 
-            {/* Expanded content */}
+            {/* ── Expanded content ── */}
             {expanded && (
                 <View style={styles.expanded}>
                     <View style={styles.divider} />
 
-                    {/* Password row */}
+                    {/* Password field */}
                     <View style={styles.fieldRow}>
-                        <Text style={styles.fieldLabel}>Password</Text>
-                        <View style={styles.fieldRight}>
-                            <Text style={styles.fieldValue} numberOfLines={1}>
-                                {showPass ? rawPassword : '●'.repeat(Math.min(rawPassword.length, 12))}
+                        <Text style={styles.fieldLabel}>🔑</Text>
+                        <Text style={[styles.fieldVal, !showPass && styles.dots]} numberOfLines={1}>
+                            {showPass ? rawPassword : '●'.repeat(Math.min(rawPassword.length, 14))}
+                        </Text>
+                        <Pressable onPress={() => setShowPass(v => !v)} style={styles.chip}>
+                            <Text style={styles.chipText}>{showPass ? 'Hide' : 'Show'}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => copy(rawPassword, 'pass')} style={styles.chip}>
+                            <Text style={[styles.chipText, copiedField === 'pass' && { color: Colors.accent }]}>
+                                {copiedField === 'pass' ? '✓' : '📋'}
                             </Text>
-                            <Pressable onPress={() => setShowPass(v => !v)} style={styles.actionBtn}>
-                                <Text style={styles.actionBtnText}>{showPass ? '🙈' : '👁'}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => copyText(rawPassword, 'password')} style={styles.actionBtn}>
-                                <Text style={styles.actionBtnText}>{copiedField === 'password' ? '✓' : '📋'}</Text>
-                            </Pressable>
-                        </View>
+                        </Pressable>
                     </View>
 
-                    {/* Username row */}
+                    {/* Username field */}
                     <View style={styles.fieldRow}>
-                        <Text style={styles.fieldLabel}>Username</Text>
-                        <View style={styles.fieldRight}>
-                            <Text style={styles.fieldValue} numberOfLines={1}>{credential.username}</Text>
-                            <Pressable onPress={() => copyText(credential.username, 'username')} style={styles.actionBtn}>
-                                <Text style={styles.actionBtnText}>{copiedField === 'username' ? '✓' : '📋'}</Text>
-                            </Pressable>
-                        </View>
+                        <Text style={styles.fieldLabel}>👤</Text>
+                        <Text style={styles.fieldVal} numberOfLines={1}>{credential.username}</Text>
+                        <Pressable onPress={() => copy(credential.username, 'user')} style={styles.chip}>
+                            <Text style={[styles.chipText, copiedField === 'user' && { color: Colors.accent }]}>
+                                {copiedField === 'user' ? '✓ Copied' : '📋 Copy'}
+                            </Text>
+                        </Pressable>
                     </View>
-
-                    {/* URL row */}
-                    {credential.siteUrl ? (
-                        <View style={styles.fieldRow}>
-                            <Text style={styles.fieldLabel}>URL</Text>
-                            <Text style={[styles.fieldValue, styles.url]} numberOfLines={1}>{credential.siteUrl}</Text>
-                        </View>
-                    ) : null}
 
                     {/* Notes */}
                     {credential.notes ? (
-                        <View style={styles.notesRow}>
-                            <Text style={styles.fieldLabel}>Notes</Text>
-                            <Text style={styles.notesText}>{credential.notes}</Text>
-                        </View>
+                        <Text style={styles.notes} numberOfLines={2}>📝 {credential.notes}</Text>
                     ) : null}
 
                     {/* Actions */}
-                    <View style={styles.actionsRow}>
-                        <Pressable onPress={onEdit} style={[styles.btn, { backgroundColor: color + '20', borderColor: color }]}>
-                            <Text style={[styles.btnText, { color }]}>✏️ Edit</Text>
+                    <View style={styles.actions}>
+                        <Pressable onPress={onEdit} style={[styles.actionBtn, { borderColor: color }]}>
+                            <Text style={[styles.actionText, { color }]}>✏️ Edit</Text>
                         </Pressable>
-                        <Pressable onPress={onDelete} style={[styles.btn, { backgroundColor: Colors.errorSoft, borderColor: Colors.error }]}>
-                            <Text style={[styles.btnText, { color: Colors.error }]}>🗑 Delete</Text>
+                        <Pressable onPress={confirmDelete} style={[styles.actionBtn, { borderColor: Colors.error }]}>
+                            <Text style={[styles.actionText, { color: Colors.error }]}>🗑 Delete</Text>
                         </Pressable>
                     </View>
                 </View>
             )}
-        </Pressable>
+        </View>
     );
 }
 
@@ -115,39 +112,56 @@ const styles = StyleSheet.create({
         borderRadius: Radii.lg,
         borderWidth: 1,
         borderColor: Colors.cardBorder,
-        borderLeftWidth: 4,
-        marginBottom: Spacing.md,
+        borderLeftWidth: 3,
+        marginBottom: Spacing.sm,
         overflow: 'hidden',
     },
-    header: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, gap: Spacing.md },
-    iconBadge: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-    icon: { fontSize: 20 },
-    info: { flex: 1 },
-    siteName: { color: Colors.text.primary, fontSize: FontSize.sm, fontWeight: '700' },
-    username: { color: Colors.text.muted, fontSize: FontSize.xs, marginTop: 2 },
-    categoryTag: { borderRadius: Radii.sm, paddingHorizontal: 8, paddingVertical: 3 },
-    categoryLabel: { fontSize: FontSize.xs, fontWeight: '600' },
-    chevron: { color: Colors.text.muted, fontSize: FontSize.xs, marginLeft: 4 },
 
-    expanded: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
-    divider: { height: 1, backgroundColor: Colors.divider, marginBottom: Spacing.md },
-
-    fieldRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
-    fieldLabel: { color: Colors.text.muted, fontSize: FontSize.xs, width: 72 },
-    fieldRight: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    fieldValue: { flex: 1, color: Colors.text.primary, fontSize: FontSize.sm, fontFamily: 'monospace' },
-    url: { color: Colors.chart.blue },
-    actionBtn: { padding: 4 },
-    actionBtnText: { fontSize: 16 },
-
-    notesRow: { marginBottom: Spacing.md },
-    notesText: { color: Colors.text.secondary, fontSize: FontSize.xs, lineHeight: 18, marginTop: 4 },
-
-    actionsRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-    btn: {
-        flex: 1, paddingVertical: Spacing.sm,
-        borderRadius: Radii.md, borderWidth: 1,
+    // Collapsed row
+    row: {
+        flexDirection: 'row',
         alignItems: 'center',
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+        gap: Spacing.sm,
     },
-    btnText: { fontSize: FontSize.sm, fontWeight: '600' },
+    iconCircle: {
+        width: 34, height: 34, borderRadius: 17,
+        alignItems: 'center', justifyContent: 'center',
+    },
+    iconText: { fontSize: 16 },
+    rowInfo: { flex: 1 },
+    siteName: { color: Colors.text.primary, fontSize: FontSize.sm, fontWeight: '700' },
+    username: { color: Colors.text.muted, fontSize: FontSize.xs, marginTop: 1 },
+    catBadge: { borderRadius: Radii.sm, paddingHorizontal: 6, paddingVertical: 2 },
+    catText:  { fontSize: FontSize.xs, fontWeight: '600' },
+    chevron:  { color: Colors.text.muted, fontSize: 10, marginLeft: 2 },
+
+    // Expanded
+    expanded: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
+    divider:  { height: 1, backgroundColor: Colors.divider, marginBottom: Spacing.sm },
+
+    fieldRow: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: Colors.input, borderRadius: Radii.md,
+        paddingHorizontal: Spacing.sm, paddingVertical: 6,
+        gap: Spacing.sm, marginBottom: Spacing.sm,
+    },
+    fieldLabel: { fontSize: 13, width: 20, textAlign: 'center' },
+    fieldVal:   { flex: 1, color: Colors.text.primary, fontSize: FontSize.xs },
+    dots:       { letterSpacing: 2, color: Colors.text.secondary },
+    chip: {
+        backgroundColor: Colors.surface, borderRadius: Radii.sm,
+        paddingHorizontal: 6, paddingVertical: 2,
+    },
+    chipText: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
+
+    notes: { color: Colors.text.muted, fontSize: FontSize.xs, lineHeight: 16, marginBottom: Spacing.sm },
+
+    actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: 2 },
+    actionBtn: {
+        flex: 1, borderWidth: 1, borderRadius: Radii.md,
+        paddingVertical: 6, alignItems: 'center',
+    },
+    actionText: { fontSize: FontSize.xs, fontWeight: '700' },
 });
