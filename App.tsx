@@ -14,18 +14,18 @@ import { Colors, FontSize } from './src/config/theme';
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
 
 const ROUTES = [
-    { key: 'standard',   title: 'Standard' },
+    { key: 'standard', title: 'Standard' },
     { key: 'scientific', title: 'Scientific' },
-    { key: 'history',    title: 'History' },
-    { key: 'metals',     title: 'Metals' },
-    { key: 'tracker',    title: 'Tracker' },
-    { key: 'tools',      title: 'Tools' },
+    { key: 'history', title: 'History' },
+    { key: 'metals', title: 'Metals' },
+    { key: 'tracker', title: 'Tracker' },
+    { key: 'tools', title: 'Tools' },
 ] as const;
 
 type RouteKey = typeof ROUTES[number]['key'];
 
 export default function App() {
-    const standardCalc  = useCalculator('calc_history_standard_v1');
+    const standardCalc = useCalculator('calc_history_standard_v1');
     const scientificCalc = useCalculator('calc_history_scientific_v1');
     const [index, setIndex] = React.useState(0);
 
