@@ -66,6 +66,7 @@ const styles = StyleSheet.create({
     },
     row: {
         flex: 1,
+        maxHeight: 68,
         flexDirection: 'row',
         gap: 8,
     },
