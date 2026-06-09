@@ -59,16 +59,15 @@ export default function ButtonGrid({ layout, actions }: Props) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingHorizontal: 8,
-        paddingVertical: 8,
-        gap: 6,
-        justifyContent: 'flex-end',
-        paddingBottom: 12,
+        paddingHorizontal: 10,
+        paddingTop: 8,
+        paddingBottom: 16,
+        gap: 8,
     },
     row: {
+        flex: 1,
         flexDirection: 'row',
-        gap: 6,
-        height: 44,
+        gap: 8,
     },
     cell: {
         flex: 1,

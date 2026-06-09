@@ -54,11 +54,11 @@ const styles = StyleSheet.create({
     },
     formula: {
         color: Colors.text.secondary,
-        fontSize: FontSize.md,
+        fontSize: FontSize.lg,
         textAlign: 'right',
         marginBottom: Spacing.md,
         fontWeight: '500',
-        letterSpacing: 0.5,
+        letterSpacing: 0.3,
     },
     result: {
         color: Colors.accent,

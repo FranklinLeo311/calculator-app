@@ -109,9 +109,9 @@ const styles = StyleSheet.create({
     },
     label: {
         color: Colors.text.white,
-        fontSize: 14,
+        fontSize: 18,
         fontWeight: '700',
-        letterSpacing: 0.3,
+        letterSpacing: 0.2,
         textAlign: 'center',
     },
 });

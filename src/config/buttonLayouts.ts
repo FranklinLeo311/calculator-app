@@ -19,35 +19,37 @@ export type ButtonDef = {
 export type ButtonRow = ButtonDef[];
 export type ButtonLayout = ButtonRow[];
 
+// Classic 4-column layout — every row has exactly 4 equal-width cells
 export const STANDARD_LAYOUT: ButtonLayout = [
     [
-        { label: 'C',   kind: 'clearEntry',  variant: 'clear' },
-        { label: '+/-', kind: 'toggleSign',  variant: 'number' },
+        { label: 'AC',  kind: 'clearEntry',  variant: 'clear' },
+        { label: '⌫',   kind: 'backspace',   variant: 'backspace' },
         { label: '%',   kind: 'input',       value: '%',  variant: 'number' },
         { label: '÷',   kind: 'operator',    value: '÷',  variant: 'operator' },
-        { label: '-',   kind: 'operator',    value: '-',  variant: 'operator' },
     ],
     [
         { label: '7', kind: 'input', value: '7', variant: 'number' },
         { label: '8', kind: 'input', value: '8', variant: 'number' },
         { label: '9', kind: 'input', value: '9', variant: 'number' },
         { label: '×', kind: 'operator', value: '×', variant: 'operator' },
-        { label: '+', kind: 'operator', value: '+', variant: 'operator' },
     ],
     [
         { label: '4', kind: 'input', value: '4', variant: 'number' },
         { label: '5', kind: 'input', value: '5', variant: 'number' },
         { label: '6', kind: 'input', value: '6', variant: 'number' },
-        { label: '=', kind: 'evaluate', variant: 'equals' },
+        { label: '-', kind: 'operator', value: '-', variant: 'operator' },
     ],
     [
         { label: '1', kind: 'input', value: '1', variant: 'number' },
         { label: '2', kind: 'input', value: '2', variant: 'number' },
         { label: '3', kind: 'input', value: '3', variant: 'number' },
+        { label: '+', kind: 'operator', value: '+', variant: 'operator' },
     ],
     [
-        { label: '0', kind: 'input', value: '0', variant: 'number', flex: 2 },
-        { label: '.', kind: 'input', value: '.', variant: 'number' },
+        { label: '+/-', kind: 'toggleSign',  variant: 'number' },
+        { label: '0',   kind: 'input',       value: '0', variant: 'number' },
+        { label: '.',   kind: 'input',       value: '.', variant: 'number' },
+        { label: '=',   kind: 'evaluate',    variant: 'equals' },
     ],
 ];
 
