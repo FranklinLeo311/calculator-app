@@ -20,21 +20,20 @@ type Props = {
     variant?: ButtonVariant;
 };
 
-async function triggerHaptic(): Promise<void> {
+// Fire-and-forget — never awaited so it never produces an unhandled rejection
+function fireHaptic(): void {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
-    try {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {
-        // haptics unavailable on this device
-    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 }
 
 export default function Button({ label, onPress, variant = 'number' }: Props) {
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
     const shadowAnim = React.useRef(new Animated.Value(0)).current;
 
-    const handlePressIn = async () => {
-        await triggerHaptic();
+    // Synchronous — no async/await so Android/Hermes can't produce an
+    // unhandled rejection from this event handler
+    const handlePressIn = () => {
+        fireHaptic();
         Animated.parallel([
             Animated.spring(scaleAnim, {
                 toValue: 0.92,
@@ -78,14 +77,23 @@ export default function Button({ label, onPress, variant = 'number' }: Props) {
 
     const handlePress = () => {
         try {
-            onPress();
+            // onPress may return a Promise (e.g. evaluateExpression).
+            // Attaching .catch() prevents Hermes from treating it as an
+            // unhandled rejection and terminating the app.
+            const result = onPress() as unknown;
+            if (result instanceof Promise) {
+                result.catch(() => {});
+            }
         } catch {
-            // swallow unexpected errors from press handlers
+            // swallow any synchronous errors too
         }
     };
 
     return (
         <View style={styles.container}>
+            {/* Animated.View must NOT have both elevation and overflow:hidden
+                on Android — that combination crashes the native renderer.
+                Shadow lives here; clipping lives on the inner Pressable. */}
             <Animated.View
                 style={[
                     styles.animatedWrapper,
@@ -97,6 +105,7 @@ export default function Button({ label, onPress, variant = 'number' }: Props) {
                     onPress={handlePress}
                     onPressIn={handlePressIn}
                     onPressOut={handlePressOut}
+                    android_ripple={null}
                 >
                     <Text style={styles.label}>{label}</Text>
                 </Pressable>
@@ -115,7 +124,8 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         elevation: 3,
-        overflow: 'hidden',
+        // overflow:hidden removed — combining it with elevation on Android
+        // causes a native crash on many devices
     },
     button: {
         flex: 1,
@@ -125,6 +135,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
+        overflow: 'hidden', // clipping now lives here, away from elevation
     },
     label: {
         color: Colors.text.white,

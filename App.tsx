@@ -23,57 +23,78 @@ export default function App() {
     const scientificCalc = useCalculator('calc_history_scientific_v1');
     const [index, setIndex] = React.useState(0);
 
-    const renderScene = ({ route }: { route: { key: string } }) => {
-        try {
-            switch (route.key as RouteKey) {
-                case 'standard':
-                    return (
-                        <ErrorBoundary>
-                            <StandardScreen
-                                expression={standardCalc.expression}
-                                result={standardCalc.result}
-                                actions={standardCalc}
-                            />
-                        </ErrorBoundary>
-                    );
-                case 'scientific':
-                    return (
-                        <ErrorBoundary>
-                            <ScientificScreen
-                                expression={scientificCalc.expression}
-                                result={scientificCalc.result}
-                                actions={scientificCalc}
-                            />
-                        </ErrorBoundary>
-                    );
-                case 'history': {
-                    const combinedHistory = [
-                        ...standardCalc.history,
-                        ...scientificCalc.history,
-                    ].sort((a, b) => b.time - a.time);
-                    return (
-                        <ErrorBoundary>
-                            <HistoryScreen
-                                history={combinedHistory}
-                                onSelect={item => {
-                                    standardCalc.loadFromHistory(item);
-                                    scientificCalc.loadFromHistory(item);
-                                }}
-                                onClear={() => {
-                                    standardCalc.clearHistory();
-                                    scientificCalc.clearHistory();
-                                }}
-                            />
-                        </ErrorBoundary>
-                    );
+    const combinedHistory = React.useMemo(
+        () =>
+            [...standardCalc.history, ...scientificCalc.history].sort(
+                (a, b) => b.time - a.time,
+            ),
+        [standardCalc.history, scientificCalc.history],
+    );
+
+    const handleHistorySelect = React.useCallback(
+        (item: any) => {
+            standardCalc.loadFromHistory(item);
+            scientificCalc.loadFromHistory(item);
+        },
+        [standardCalc.loadFromHistory, scientificCalc.loadFromHistory],
+    );
+
+    const handleHistoryClear = React.useCallback(() => {
+        standardCalc.clearHistory();
+        scientificCalc.clearHistory();
+    }, [standardCalc.clearHistory, scientificCalc.clearHistory]);
+
+    // Stable reference — recreating renderScene on every keystroke causes
+    // TabView to unmount/remount all scenes mid-interaction on Android.
+    const renderScene = React.useCallback(
+        ({ route }: { route: { key: string } }) => {
+            try {
+                switch (route.key as RouteKey) {
+                    case 'standard':
+                        return (
+                            <ErrorBoundary>
+                                <StandardScreen
+                                    expression={standardCalc.expression}
+                                    result={standardCalc.result}
+                                    actions={standardCalc}
+                                />
+                            </ErrorBoundary>
+                        );
+                    case 'scientific':
+                        return (
+                            <ErrorBoundary>
+                                <ScientificScreen
+                                    expression={scientificCalc.expression}
+                                    result={scientificCalc.result}
+                                    actions={scientificCalc}
+                                />
+                            </ErrorBoundary>
+                        );
+                    case 'history':
+                        return (
+                            <ErrorBoundary>
+                                <HistoryScreen
+                                    history={combinedHistory}
+                                    onSelect={handleHistorySelect}
+                                    onClear={handleHistoryClear}
+                                />
+                            </ErrorBoundary>
+                        );
+                    default:
+                        return null;
                 }
-                default:
-                    return null;
+            } catch {
+                return null;
             }
-        } catch {
-            return null;
-        }
-    };
+        },
+        [
+            standardCalc,
+            scientificCalc,
+            combinedHistory,
+            handleHistorySelect,
+            handleHistoryClear,
+        ],
+    );
 
     return (
         <ErrorBoundary fallbackMessage="The calculator encountered an unexpected error. Tap Try Again to restart.">
