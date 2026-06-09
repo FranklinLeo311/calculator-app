@@ -15,52 +15,55 @@ export type MetalRates = {
 
 type Cache = MetalRates & { fetchedAt: number };
 
-// fawazahmed0/exchange-api — the UPDATED repo (currency-api was archived 2023).
-// jsDelivr CDN serves any GitHub file with Access-Control-Allow-Origin: *
-// so this works in both browser (web) and native (Android/iOS) with no CORS issue.
-// A Cloudflare Pages mirror is used as fallback if jsDelivr is slow.
+// Two free APIs with fallback — both require no API key and allow CORS.
 //
-// Response: { "date": "2024-06-10", "xau": { "inr": 196234.67 } }
-// where xau.inr = price of 1 troy ounce of gold in INR (updated daily).
-const CDN_BASE    = 'https://cdn.jsdelivr.net/gh/fawazahmed0/exchange-api@1/latest/v1/currencies';
-const MIRROR_BASE = 'https://latest.currency-api.pages.dev/v1/currencies';
+// Primary: open.er-api.com
+//   GET https://open.er-api.com/v6/latest/USD
+//   Response: { "result": "success", "rates": { "XAU": 0.000295, "XAG": 0.030, "INR": 83.5, ... } }
+//   XAU / XAG values = troy oz per 1 USD (invert to get USD per troy oz)
+//
+// Fallback: fxratesapi.com
+//   GET https://api.fxratesapi.com/latest?base=USD&currencies=XAU,XAG,INR
+//   Response: { "success": true, "rates": { "XAU": 0.000235, "XAG": 0.01536, "INR": 95.39 } }
 
-type MetalJson = { xau?: { inr: number }; xag?: { inr: number } };
+const OPEN_ER_URL  = 'https://open.er-api.com/v6/latest/USD';
+const FXRATES_URL  = 'https://api.fxratesapi.com/latest?base=USD&currencies=XAU,XAG,INR';
+const TROY_GRAMS   = 31.1035;
 
-async function fetchMetal<T>(slug: string): Promise<T> {
-    try {
-        return await fetchJson<T>(`${CDN_BASE}/${slug}`);
-    } catch {
-        return await fetchJson<T>(`${MIRROR_BASE}/${slug}`);
-    }
-}
+type OpenErResponse  = { result: string; rates: Record<string, number> };
+type FxRatesResponse = { success: boolean; rates: { INR: number; XAU: number; XAG: number } };
 
-const TROY_GRAMS = 31.1035;
-
-async function fetchRates(): Promise<MetalRates> {
-    const [xauData, xagData, exData] = await Promise.all([
-        fetchMetal<MetalJson>('xau/inr.min.json'),
-        fetchMetal<MetalJson>('xag/inr.min.json'),
-        fetchJson<{ rates: { INR: number } }>('https://api.frankfurter.app/latest?from=USD&to=INR'),
-    ]);
-
-    const xauInr = xauData?.xau?.inr ?? 0;
-    const xagInr = xagData?.xag?.inr ?? 0;
-
-    if (!xauInr) throw new Error('Gold rate unavailable from API');
-
-    const gold24kPerGram = xauInr / TROY_GRAMS;
-    const gold22kPerGram = gold24kPerGram * (22 / 24);
-    const silverPerGram  = xagInr > 0 ? xagInr / TROY_GRAMS : 0;
-    const usdInr         = exData?.rates?.INR ?? 0;
-
+function calcRates(xauPerUsd: number, xagPerUsd: number, usdInr: number): MetalRates {
+    const xauUsd = 1 / xauPerUsd;
+    const xagUsd = xagPerUsd > 0 ? 1 / xagPerUsd : 0;
+    const gold24kPerGram = (xauUsd * usdInr) / TROY_GRAMS;
     return {
         gold24k:   Math.round(gold24kPerGram),
-        gold22k:   Math.round(gold22kPerGram),
-        silver:    Math.round(silverPerGram * 100) / 100,
+        gold22k:   Math.round(gold24kPerGram * (22 / 24)),
+        silver:    Math.round((xagUsd * usdInr) / TROY_GRAMS * 100) / 100,
         usdInr:    Math.round(usdInr * 100) / 100,
         updatedAt: Date.now(),
     };
+}
+
+async function fetchFromOpenEr(): Promise<MetalRates> {
+    const data = await fetchJson<OpenErResponse>(OPEN_ER_URL);
+    if (data?.result !== 'success' || !data.rates?.XAU) throw new Error('open.er-api: no XAU');
+    return calcRates(data.rates.XAU, data.rates.XAG ?? 0, data.rates.INR ?? 83);
+}
+
+async function fetchFromFxRates(): Promise<MetalRates> {
+    const data = await fetchJson<FxRatesResponse>(FXRATES_URL);
+    if (!data?.success || !data.rates?.XAU) throw new Error('fxratesapi: no XAU');
+    return calcRates(data.rates.XAU, data.rates.XAG ?? 0, data.rates.INR ?? 83);
+}
+
+async function fetchRates(): Promise<MetalRates> {
+    try {
+        return await fetchFromOpenEr();
+    } catch {
+        return await fetchFromFxRates();
+    }
 }
 
 export type MetalHistory = { date: string; gold24k: number }[];
