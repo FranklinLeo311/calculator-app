@@ -14,6 +14,7 @@ import UnitConverterScreen from './src/screens/UnitConverterScreen';
 import TechNewsScreen from './src/screens/TechNewsScreen';
 import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
 import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
+import JobTrackerScreen from './src/screens/JobTrackerScreen';
 import { Colors, FontSize } from './src/config/theme';
 
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
@@ -30,6 +31,7 @@ const ROUTES = [
     { key: 'news',      title: '📰 Tech'   },
     { key: 'passwords', title: '🔐 Vault'  },
     { key: 'documents', title: '📁 Docs'   },
+    { key: 'jobs',      title: '💼 Jobs'   },
 ] as const;
 
 type RouteKey = typeof ROUTES[number]['key'];
@@ -121,6 +123,12 @@ export default function App() {
                         return (
                             <ErrorBoundary>
                                 <DocumentManagerScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'jobs':
+                        return (
+                            <ErrorBoundary>
+                                <JobTrackerScreen />
                             </ErrorBoundary>
                         );
                     default:
