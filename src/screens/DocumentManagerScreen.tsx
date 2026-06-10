@@ -64,40 +64,64 @@ export default function DocumentManagerScreen() {
         }
     }
 
+    // ── MIME → extension lookup ──────────────────────────────────────────────
+    const MIME_EXT: Record<string, string> = {
+        'application/pdf': 'pdf',
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/vnd.ms-powerpoint': 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+        'text/plain': 'txt',
+        'text/csv': 'csv',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+    };
+
     // ── Pick any file (PDF, Excel, Word, etc.) ───────────────────────────────
     async function pickFromFiles() {
-        const result = await DocumentPicker.getDocumentAsync({
-            type: '*/*',
-            copyToCacheDirectory: true,
-        });
-        if (result.canceled || !result.assets?.[0]) return;
-        const asset = result.assets[0];
-        const base64Data = await FileSystem.readAsStringAsync(asset.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-        });
-        const sizeKb = Math.round((base64Data.length * 3) / 4 / 1024);
-        if (sizeKb > 10240) {
-            Alert.alert('File too large', 'Document must be under 10 MB.');
-            return;
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+            });
+            // SDK 48 DocumentPicker returns { type: 'cancel' | 'success', uri, name, mimeType }
+            const res = result as any;
+            if (res.type === 'cancel') return;
+            // Support both old API (res.uri) and new API (res.assets[0].uri)
+            const asset = res.assets?.[0] ?? res;
+            const base64Data = await FileSystem.readAsStringAsync(asset.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            const sizeKb = Math.round((base64Data.length * 3) / 4 / 1024);
+            if (sizeKb > 10240) {
+                Alert.alert('File too large', 'Document must be under 10 MB.');
+                return;
+            }
+            const mime = asset.mimeType ?? 'application/octet-stream';
+            const base64Uri = `data:${mime};base64,${base64Data}`;
+            const ext = MIME_EXT[mime] ?? mime.split('/')[1]?.split('.').pop() ?? 'bin';
+            const autoName = addState.name.trim() || asset.name || `${addState.docType}.${ext}`;
+
+            const doc: VaultDocument = {
+                id:        genId(),
+                name:      autoName,
+                docType:   addState.docType,
+                base64:    base64Uri,
+                mimeType:  mime,
+                sizeKb,
+                createdAt: Date.now(),
+            };
+
+            const updated = [doc, ...docs];
+            setDocs(updated);
+            await saveDocuments(updated);
+            setAddState({ visible: false, name: '', docType: 'Other' });
+        } catch (err: any) {
+            Alert.alert('Error', err?.message ?? 'Could not pick file.');
         }
-        const mime = asset.mimeType ?? 'application/octet-stream';
-        const base64Uri = `data:${mime};base64,${base64Data}`;
-        const autoName = addState.name.trim() || asset.name || addState.docType;
-
-        const doc: VaultDocument = {
-            id:        genId(),
-            name:      autoName,
-            docType:   addState.docType,
-            base64:    base64Uri,
-            mimeType:  mime,
-            sizeKb,
-            createdAt: Date.now(),
-        };
-
-        const updated = [doc, ...docs];
-        setDocs(updated);
-        await saveDocuments(updated);
-        setAddState({ visible: false, name: '', docType: 'Other' });
     }
 
     async function addDocument(asset: ImagePicker.ImagePickerAsset) {
@@ -107,8 +131,7 @@ export default function DocumentManagerScreen() {
             Alert.alert('File too large', 'Document must be under 4 MB.');
             return;
         }
-        const ext  = asset.mimeType?.split('/')[1] ?? 'jpeg';
-        const mime = asset.mimeType ?? 'image/jpeg';
+        const mime = (asset as any).mimeType ?? 'image/jpeg';
         const base64Uri = `data:${mime};base64,${asset.base64}`;
         const autoName  = addState.name.trim() || addState.docType;
 
@@ -132,7 +155,7 @@ export default function DocumentManagerScreen() {
     async function shareDocument(doc: VaultDocument) {
         try {
             const base64Data = doc.base64.split(',')[1];
-            const ext        = doc.mimeType.split('/')[1] ?? 'jpg';
+            const ext        = MIME_EXT[doc.mimeType] ?? doc.mimeType.split('/')[1]?.split('.').pop() ?? 'bin';
             const path       = `${FileSystem.cacheDirectory}${doc.name.replace(/\s/g, '_')}.${ext}`;
             await FileSystem.writeAsStringAsync(path, base64Data, { encoding: FileSystem.EncodingType.Base64 });
             await Sharing.shareAsync(path, { mimeType: doc.mimeType });
@@ -154,6 +177,7 @@ export default function DocumentManagerScreen() {
         Alert.alert('Add Document', 'Choose source', [
             { text: '📷 Camera',  onPress: () => { setAddState(a => ({ ...a, visible: true })); setPicking('camera' as any); } },
             { text: '🖼 Gallery', onPress: () => { setAddState(a => ({ ...a, visible: true })); setPicking('gallery' as any); } },
+            { text: '📂 Files', onPress: pickFromFiles },
             { text: 'Cancel', style: 'cancel' },
         ]);
     }

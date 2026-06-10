@@ -21,6 +21,7 @@ type Props = {
 export default function StandardScreen({ expression, result, actions, history, onHistorySelect, onHistoryClear }: Props) {
     return (
         <GradientBackground>
+            <View style={{ flex: 1 }}>
             <Display formula={expression} result={result} />
 
             {/* History section */}
@@ -53,16 +54,19 @@ export default function StandardScreen({ expression, result, actions, history, o
                 )}
             </View>
 
-            <ButtonGrid layout={STANDARD_LAYOUT} actions={actions} />
+            </View>
+            <View style={{ flexShrink: 0 }}>
+                <ButtonGrid layout={STANDARD_LAYOUT} actions={actions} />
+            </View>
         </GradientBackground>
     );
 }
 
 const styles = StyleSheet.create({
     historySection: {
+        flex: 1,
         marginHorizontal: Spacing.xl,
-        marginBottom: Spacing.md,
-        maxHeight: 160,
+        marginBottom: 0,
         backgroundColor: Colors.surface,
         borderRadius: Radii.lg,
         borderWidth: 1,

@@ -46,9 +46,9 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: Colors.historyCard,
         borderRadius: Radii.lg,
-        padding: 14,
-        marginBottom: Spacing.lg,
-        borderLeftWidth: 4,
+        padding: 8,
+        marginBottom: 6,
+        borderLeftWidth: 3,
         borderLeftColor: Colors.accent,
         borderWidth: 1,
         borderColor: Colors.surfaceBorder,
@@ -69,21 +69,21 @@ const styles = StyleSheet.create({
     },
     expression: {
         color: '#cbd5e1',
-        fontSize: FontSize.md,
+        fontSize: 11,
         flex: 1,
         fontWeight: '500',
     },
     badge: {
         backgroundColor: Colors.accentSoft,
         borderRadius: Radii.sm,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.xs + 2,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
         borderWidth: 1,
         borderColor: Colors.accent,
     },
     result: {
         color: Colors.accent,
-        fontSize: FontSize.md,
+        fontSize: 11,
         fontWeight: '700',
     },
 });

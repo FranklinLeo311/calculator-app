@@ -9,6 +9,9 @@ import StandardScreen from './src/screens/StandardScreen';
 import GoldSilverScreen from './src/screens/GoldSilverScreen';
 // import InstagramTrackerScreen from './src/screens/InstagramTrackerScreen';
 import ToolsScreen from './src/screens/ToolsScreen';
+import CurrencyConverterScreen from './src/screens/CurrencyConverterScreen';
+import UnitConverterScreen from './src/screens/UnitConverterScreen';
+import TechNewsScreen from './src/screens/TechNewsScreen';
 import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
 import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
 import { Colors, FontSize } from './src/config/theme';
@@ -22,6 +25,9 @@ const ROUTES = [
     { key: 'metals',    title: 'Metals'    },
     // { key: 'tracker',   title: 'Tracker'   },
     { key: 'tools',     title: 'Tools'     },
+    { key: 'currency',  title: '🌍 Currency' },
+    { key: 'units',     title: '📐 Units'    },
+    { key: 'news',      title: '📰 Tech'   },
     { key: 'passwords', title: '🔐 Vault'  },
     { key: 'documents', title: '📁 Docs'   },
 ] as const;
@@ -85,6 +91,24 @@ export default function App() {
                         return (
                             <ErrorBoundary>
                                 <ToolsScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'currency':
+                        return (
+                            <ErrorBoundary>
+                                <CurrencyConverterScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'units':
+                        return (
+                            <ErrorBoundary>
+                                <UnitConverterScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'news':
+                        return (
+                            <ErrorBoundary>
+                                <TechNewsScreen />
                             </ErrorBoundary>
                         );
                     case 'passwords':
