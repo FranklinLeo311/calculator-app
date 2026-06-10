@@ -4,10 +4,10 @@ import { TabView, TabBar } from 'react-native-tab-view';
 import useCalculator from './src/hooks/useCalculator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import StandardScreen from './src/screens/StandardScreen';
-import ScientificScreen from './src/screens/ScientificScreen';
-import HistoryScreen from './src/screens/HistoryScreen';
+// import ScientificScreen from './src/screens/ScientificScreen';
+// import HistoryScreen from './src/screens/HistoryScreen';
 import GoldSilverScreen from './src/screens/GoldSilverScreen';
-import InstagramTrackerScreen from './src/screens/InstagramTrackerScreen';
+// import InstagramTrackerScreen from './src/screens/InstagramTrackerScreen';
 import ToolsScreen from './src/screens/ToolsScreen';
 import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
 import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
@@ -17,10 +17,10 @@ const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
 
 const ROUTES = [
     { key: 'standard',  title: 'Standard'  },
-    { key: 'scientific',title: 'Scientific' },
-    { key: 'history',   title: 'History'   },
+    // { key: 'scientific',title: 'Scientific' },
+    // { key: 'history',   title: 'History'   },
     { key: 'metals',    title: 'Metals'    },
-    { key: 'tracker',   title: 'Tracker'   },
+    // { key: 'tracker',   title: 'Tracker'   },
     { key: 'tools',     title: 'Tools'     },
     { key: 'passwords', title: '🔐 Vault'  },
     { key: 'documents', title: '📁 Docs'   },
@@ -30,29 +30,7 @@ type RouteKey = typeof ROUTES[number]['key'];
 
 export default function App() {
     const standardCalc = useCalculator('calc_history_standard_v1');
-    const scientificCalc = useCalculator('calc_history_scientific_v1');
     const [index, setIndex] = React.useState(0);
-
-    const combinedHistory = React.useMemo(
-        () =>
-            [...standardCalc.history, ...scientificCalc.history].sort(
-                (a, b) => b.time - a.time,
-            ),
-        [standardCalc.history, scientificCalc.history],
-    );
-
-    const handleHistorySelect = React.useCallback(
-        (item: any) => {
-            standardCalc.loadFromHistory(item);
-            scientificCalc.loadFromHistory(item);
-        },
-        [standardCalc.loadFromHistory, scientificCalc.loadFromHistory],
-    );
-
-    const handleHistoryClear = React.useCallback(() => {
-        standardCalc.clearHistory();
-        scientificCalc.clearHistory();
-    }, [standardCalc.clearHistory, scientificCalc.clearHistory]);
 
     const renderScene = React.useCallback(
         ({ route }: { route: { key: string } }) => {
@@ -65,41 +43,44 @@ export default function App() {
                                     expression={standardCalc.expression}
                                     result={standardCalc.result}
                                     actions={standardCalc}
+                                    history={standardCalc.history}
+                                    onHistorySelect={standardCalc.loadFromHistory}
+                                    onHistoryClear={standardCalc.clearHistory}
                                 />
                             </ErrorBoundary>
                         );
-                    case 'scientific':
-                        return (
-                            <ErrorBoundary>
-                                <ScientificScreen
-                                    expression={scientificCalc.expression}
-                                    result={scientificCalc.result}
-                                    actions={scientificCalc}
-                                />
-                            </ErrorBoundary>
-                        );
-                    case 'history':
-                        return (
-                            <ErrorBoundary>
-                                <HistoryScreen
-                                    history={combinedHistory}
-                                    onSelect={handleHistorySelect}
-                                    onClear={handleHistoryClear}
-                                />
-                            </ErrorBoundary>
-                        );
+                    // case 'scientific':
+                    //     return (
+                    //         <ErrorBoundary>
+                    //             <ScientificScreen
+                    //                 expression={scientificCalc.expression}
+                    //                 result={scientificCalc.result}
+                    //                 actions={scientificCalc}
+                    //             />
+                    //         </ErrorBoundary>
+                    //     );
+                    // case 'history':
+                    //     return (
+                    //         <ErrorBoundary>
+                    //             <HistoryScreen
+                    //                 history={combinedHistory}
+                    //                 onSelect={handleHistorySelect}
+                    //                 onClear={handleHistoryClear}
+                    //             />
+                    //         </ErrorBoundary>
+                    //     );
                     case 'metals':
                         return (
                             <ErrorBoundary>
                                 <GoldSilverScreen />
                             </ErrorBoundary>
                         );
-                    case 'tracker':
-                        return (
-                            <ErrorBoundary>
-                                <InstagramTrackerScreen />
-                            </ErrorBoundary>
-                        );
+                    // case 'tracker':
+                    //     return (
+                    //         <ErrorBoundary>
+                    //             <InstagramTrackerScreen />
+                    //         </ErrorBoundary>
+                    //     );
                     case 'tools':
                         return (
                             <ErrorBoundary>
@@ -125,13 +106,7 @@ export default function App() {
                 return null;
             }
         },
-        [
-            standardCalc,
-            scientificCalc,
-            combinedHistory,
-            handleHistorySelect,
-            handleHistoryClear,
-        ],
+        [standardCalc],
     );
 
     return (

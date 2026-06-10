@@ -17,8 +17,9 @@ export async function fetchWithTimeout(
 export async function fetchJson<T>(
     url: string,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    headers?: Record<string, string>,
 ): Promise<T> {
-    const res = await fetchWithTimeout(url, {}, timeoutMs);
+    const res = await fetchWithTimeout(url, { headers }, timeoutMs);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     return res.json() as Promise<T>;
 }

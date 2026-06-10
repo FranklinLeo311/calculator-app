@@ -15,55 +15,90 @@ export type MetalRates = {
 
 type Cache = MetalRates & { fetchedAt: number };
 
-// Two free APIs with fallback — both require no API key and allow CORS.
+// Metal price chain (no API key required):
+//   Tier 1 — goldprice.org  — live spot prices (USD/oz), updated in near-real-time
+//   Tier 2 — Yahoo Finance  — COMEX gold/silver futures (GC=F / SI=F)
+//   Tier 3 — open.er-api.com — daily XAU/XAG rates (may lag by hours)
 //
-// Primary: open.er-api.com
-//   GET https://open.er-api.com/v6/latest/USD
-//   Response: { "result": "success", "rates": { "XAU": 0.000295, "XAG": 0.030, "INR": 83.5, ... } }
-//   XAU / XAG values = troy oz per 1 USD (invert to get USD per troy oz)
+// USD/INR: frankfurter.app (ECB-sourced, daily) → open.er-api.com fallback
 //
-// Fallback: fxratesapi.com
-//   GET https://api.fxratesapi.com/latest?base=USD&currencies=XAU,XAG,INR
-//   Response: { "success": true, "rates": { "XAU": 0.000235, "XAG": 0.01536, "INR": 95.39 } }
+// India price = international_spot_per_gram × usdInr × INDIA_DUTY_FACTOR
+//   BCD 6% + AIDC 5% + SWS ~0.6% = 11.6% duty, then 3% GST → 1.116 × 1.03 = 1.1495
 
-const OPEN_ER_URL  = 'https://open.er-api.com/v6/latest/USD';
-const FXRATES_URL  = 'https://api.fxratesapi.com/latest?base=USD&currencies=XAU,XAG,INR';
-const TROY_GRAMS   = 31.1035;
+const TROY_GRAMS        = 31.1035;
+const INDIA_DUTY_FACTOR = 1.116 * 1.03; // ≈ 1.1495
 
-type OpenErResponse  = { result: string; rates: Record<string, number> };
-type FxRatesResponse = { success: boolean; rates: { INR: number; XAU: number; XAG: number } };
+// Tier 1: goldprice.org — returns live gold & silver directly in USD/troy oz
+const GOLDPRICE_URL = 'https://data-asg.goldprice.org/dbXRates/USD';
+// Tier 2: Yahoo Finance futures
+const YAHOO_GOLD_URL   = 'https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=1d';
+const YAHOO_SILVER_URL = 'https://query2.finance.yahoo.com/v8/finance/chart/SI%3DF?interval=1d&range=1d';
+// Tier 3 / USD/INR
+const FRANKFURTER_URL = 'https://api.frankfurter.app/latest?from=USD&to=INR';
+const OPEN_ER_URL     = 'https://open.er-api.com/v6/latest/USD';
 
-function calcRates(xauPerUsd: number, xagPerUsd: number, usdInr: number): MetalRates {
-    const xauUsd = 1 / xauPerUsd;
-    const xagUsd = xagPerUsd > 0 ? 1 / xagPerUsd : 0;
-    const gold24kPerGram = (xauUsd * usdInr) / TROY_GRAMS;
+const BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Android 13; Mobile) AppleWebKit/537.36',
+    'Accept': 'application/json',
+};
+
+type GoldPriceResp = { items: [{ curr: string; xauPrice: number; xagPrice: number }] };
+type YahooChart    = { chart: { result: [{ meta: { regularMarketPrice: number } }] } };
+type OpenErResp    = { result: string; rates: Record<string, number> };
+
+function buildRates(goldUsdOz: number, silverUsdOz: number, usdInr: number): MetalRates {
+    const goldPerGram   = (goldUsdOz   / TROY_GRAMS) * usdInr * INDIA_DUTY_FACTOR;
+    const silverPerGram = (silverUsdOz / TROY_GRAMS) * usdInr * INDIA_DUTY_FACTOR;
     return {
-        gold24k:   Math.round(gold24kPerGram),
-        gold22k:   Math.round(gold24kPerGram * (22 / 24)),
-        silver:    Math.round((xagUsd * usdInr) / TROY_GRAMS * 100) / 100,
+        gold24k:   Math.round(goldPerGram),
+        gold22k:   Math.round(goldPerGram * (22 / 24)),
+        silver:    Math.round(silverPerGram * 100) / 100,
         usdInr:    Math.round(usdInr * 100) / 100,
         updatedAt: Date.now(),
     };
 }
 
-async function fetchFromOpenEr(): Promise<MetalRates> {
-    const data = await fetchJson<OpenErResponse>(OPEN_ER_URL);
-    if (data?.result !== 'success' || !data.rates?.XAU) throw new Error('open.er-api: no XAU');
-    return calcRates(data.rates.XAU, data.rates.XAG ?? 0, data.rates.INR ?? 83);
-}
-
-async function fetchFromFxRates(): Promise<MetalRates> {
-    const data = await fetchJson<FxRatesResponse>(FXRATES_URL);
-    if (!data?.success || !data.rates?.XAU) throw new Error('fxratesapi: no XAU');
-    return calcRates(data.rates.XAU, data.rates.XAG ?? 0, data.rates.INR ?? 83);
+async function fetchUsdInr(): Promise<number> {
+    try {
+        const d = await fetchJson<{ rates: { INR: number } }>(FRANKFURTER_URL, 8000);
+        if (d?.rates?.INR) return d.rates.INR;
+    } catch { /* fall through */ }
+    const d2 = await fetchJson<OpenErResp>(OPEN_ER_URL, 8000);
+    if (d2?.rates?.INR) return d2.rates.INR;
+    return 84;
 }
 
 async function fetchRates(): Promise<MetalRates> {
+    // Tier 1: goldprice.org — most accurate live prices
     try {
-        return await fetchFromOpenEr();
-    } catch {
-        return await fetchFromFxRates();
-    }
+        const [gp, usdInr] = await Promise.all([
+            fetchJson<GoldPriceResp>(GOLDPRICE_URL, 8000, BROWSER_HEADERS),
+            fetchUsdInr(),
+        ]);
+        const item = gp?.items?.[0];
+        if (item?.xauPrice && item?.xagPrice) {
+            return buildRates(item.xauPrice, item.xagPrice, usdInr);
+        }
+    } catch { /* fall through */ }
+
+    // Tier 2: Yahoo Finance futures
+    try {
+        const [gYahoo, sYahoo, usdInr] = await Promise.all([
+            fetchJson<YahooChart>(YAHOO_GOLD_URL, 10000, BROWSER_HEADERS),
+            fetchJson<YahooChart>(YAHOO_SILVER_URL, 10000, BROWSER_HEADERS),
+            fetchUsdInr(),
+        ]);
+        const goldUsd   = gYahoo?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        const silverUsd = sYahoo?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (goldUsd && silverUsd) {
+            return buildRates(goldUsd, silverUsd, usdInr);
+        }
+    } catch { /* fall through */ }
+
+    // Tier 3: open.er-api.com (daily XAU/XAG, may lag)
+    const data = await fetchJson<OpenErResp>(OPEN_ER_URL);
+    if (data?.result !== 'success' || !data.rates?.XAU) throw new Error('All metal APIs failed');
+    return buildRates(1 / data.rates.XAU, data.rates.XAG ? 1 / data.rates.XAG : 0, data.rates.INR ?? 84);
 }
 
 export type MetalHistory = { date: string; gold24k: number }[];

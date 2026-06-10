@@ -10,9 +10,8 @@ import CredentialForm from '../components/vault/CredentialForm';
 import { Colors, FontSize, Spacing, Radii } from '../config/theme';
 import {
     loadCredentials, saveCredentials, loadPin, savePin,
-    CATEGORIES, CATEGORY_ICONS, CATEGORY_COLORS,
 } from '../utils/vaultUtils';
-import type { Credential, Category } from '../utils/vaultUtils';
+import type { Credential } from '../utils/vaultUtils';
 
 type PinState = 'loading' | 'setup' | 'confirm' | 'locked' | 'unlocked';
 
@@ -22,7 +21,6 @@ export default function PasswordManagerScreen() {
     const [pendingPin,    setPendingPin]    = React.useState('');
     const [credentials,   setCredentials]   = React.useState<Credential[]>([]);
     const [search,        setSearch]        = React.useState('');
-    const [filterCat,     setFilterCat]     = React.useState<Category | 'All'>('All');
     const [formVisible,   setFormVisible]   = React.useState(false);
     const [editTarget,    setEditTarget]    = React.useState<Credential | null>(null);
 
@@ -86,9 +84,7 @@ export default function PasswordManagerScreen() {
     // ── Filter ────────────────────────────────────────────────────────────────
     const filtered = credentials.filter(c => {
         const q = search.toLowerCase();
-        const matchSearch = !q || c.siteName.toLowerCase().includes(q) || c.username.toLowerCase().includes(q);
-        const matchCat    = filterCat === 'All' || c.category === filterCat;
-        return matchSearch && matchCat;
+        return !q || c.siteName.toLowerCase().includes(q) || c.username.toLowerCase().includes(q);
     });
 
     // ── PIN screens ────────────────────────────────────────────────────────────
@@ -161,24 +157,6 @@ export default function PasswordManagerScreen() {
                     </Pressable>
                 </View>
 
-                {/* Stats row */}
-                {credentials.length > 0 && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
-                        {CATEGORIES.map(cat => {
-                            const count = credentials.filter(c => c.category === cat).length;
-                            if (!count) return null;
-                            const color = CATEGORY_COLORS[cat];
-                            return (
-                                <Pressable key={cat} onPress={() => setFilterCat(cat)} style={[styles.statCard, { borderColor: color + '50' }]}>
-                                    <Text style={styles.statIcon}>{CATEGORY_ICONS[cat]}</Text>
-                                    <Text style={[styles.statCount, { color }]}>{count}</Text>
-                                    <Text style={styles.statLabel}>{cat}</Text>
-                                </Pressable>
-                            );
-                        })}
-                    </ScrollView>
-                )}
-
                 {/* Search */}
                 <View style={styles.searchRow}>
                     <Text style={styles.searchIcon}>🔍</Text>
@@ -196,28 +174,6 @@ export default function PasswordManagerScreen() {
                         </Pressable>
                     ) : null}
                 </View>
-
-                {/* Category filter */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.catFilterRow}
-                >
-                    {(['All', ...CATEGORIES] as const).map(cat => {
-                        const sel = filterCat === cat;
-                        const color = cat === 'All' ? Colors.accent : CATEGORY_COLORS[cat];
-                        return (
-                            <Pressable
-                                key={cat}
-                                onPress={() => setFilterCat(cat)}
-                                style={[styles.catFilter, sel && { backgroundColor: color + '25', borderColor: color }]}
-                            >
-                                {cat !== 'All' && <Text>{CATEGORY_ICONS[cat]}</Text>}
-                                <Text style={[styles.catFilterLabel, sel && { color }]}>{cat}</Text>
-                            </Pressable>
-                        );
-                    })}
-                </ScrollView>
 
                 {/* Credential list */}
                 <ScrollView
@@ -279,16 +235,6 @@ const styles = StyleSheet.create({
     },
     addBtnText: { color: Colors.text.white, fontWeight: '700', fontSize: FontSize.sm },
 
-    statsRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xl, marginBottom: Spacing.md, paddingBottom: 2 },
-    statCard: {
-        alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        backgroundColor: Colors.card, borderRadius: Radii.lg,
-        borderWidth: 1, minWidth: 68,
-    },
-    statIcon:  { fontSize: 18, marginBottom: 2 },
-    statCount: { fontSize: FontSize.lg, fontWeight: '800' },
-    statLabel: { color: Colors.text.muted, fontSize: FontSize.xs },
-
     searchRow: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: Colors.input,
@@ -299,14 +245,6 @@ const styles = StyleSheet.create({
     searchIcon: { fontSize: 16, marginRight: Spacing.sm },
     searchInput: { flex: 1, paddingVertical: Spacing.md, color: Colors.text.primary, fontSize: FontSize.body },
     clearSearch: { color: Colors.text.muted, fontSize: FontSize.body, padding: 4 },
-
-    catFilterRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xl, marginBottom: Spacing.md, paddingBottom: 2 },
-    catFilter: {
-        flexDirection: 'row', alignItems: 'center', gap: 4,
-        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        borderRadius: Radii.xl, borderWidth: 1, borderColor: Colors.inputBorder,
-    },
-    catFilterLabel: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
 
     list: { paddingHorizontal: Spacing.xl, paddingBottom: 80 },
 

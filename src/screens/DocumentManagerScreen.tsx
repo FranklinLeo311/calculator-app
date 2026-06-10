@@ -5,6 +5,7 @@ import {
     FlatList,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import GradientBackground from '../components/GradientBackground';
@@ -23,7 +24,6 @@ export default function DocumentManagerScreen() {
     const [loading,   setLoading]   = React.useState(true);
     const [viewer,    setViewer]    = React.useState<VaultDocument | null>(null);
     const [addState,  setAddState]  = React.useState<AddState>({ visible: false, name: '', docType: 'Other' });
-    const [filterType, setFilterType] = React.useState<DocType | 'All'>('All');
     const [picking,   setPicking]   = React.useState(false);
 
     React.useEffect(() => {
@@ -62,6 +62,42 @@ export default function DocumentManagerScreen() {
         if (!result.canceled && result.assets[0]) {
             await addDocument(result.assets[0]);
         }
+    }
+
+    // ── Pick any file (PDF, Excel, Word, etc.) ───────────────────────────────
+    async function pickFromFiles() {
+        const result = await DocumentPicker.getDocumentAsync({
+            type: '*/*',
+            copyToCacheDirectory: true,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        const base64Data = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        const sizeKb = Math.round((base64Data.length * 3) / 4 / 1024);
+        if (sizeKb > 10240) {
+            Alert.alert('File too large', 'Document must be under 10 MB.');
+            return;
+        }
+        const mime = asset.mimeType ?? 'application/octet-stream';
+        const base64Uri = `data:${mime};base64,${base64Data}`;
+        const autoName = addState.name.trim() || asset.name || addState.docType;
+
+        const doc: VaultDocument = {
+            id:        genId(),
+            name:      autoName,
+            docType:   addState.docType,
+            base64:    base64Uri,
+            mimeType:  mime,
+            sizeKb,
+            createdAt: Date.now(),
+        };
+
+        const updated = [doc, ...docs];
+        setDocs(updated);
+        await saveDocuments(updated);
+        setAddState({ visible: false, name: '', docType: 'Other' });
     }
 
     async function addDocument(asset: ImagePicker.ImagePickerAsset) {
@@ -122,7 +158,7 @@ export default function DocumentManagerScreen() {
         ]);
     }
 
-    const filtered = docs.filter(d => filterType === 'All' || d.docType === filterType);
+    const filtered = docs;
 
     // ── Full-screen viewer ───────────────────────────────────────────────────
     if (viewer) {
@@ -139,11 +175,27 @@ export default function DocumentManagerScreen() {
                         </Pressable>
                     </View>
                     <View style={styles.viewerImageArea}>
-                        <Image
-                            source={{ uri: viewer.base64 }}
-                            style={styles.viewerImage}
-                            resizeMode="contain"
-                        />
+                        {viewer.mimeType.startsWith('image/') ? (
+                            <Image
+                                source={{ uri: viewer.base64 }}
+                                style={styles.viewerImage}
+                                resizeMode="contain"
+                            />
+                        ) : (
+                            <View style={styles.viewerFileIcon}>
+                                <Text style={styles.viewerFileEmoji}>
+                                    {viewer.mimeType.includes('pdf') ? '📄'
+                                        : viewer.mimeType.includes('sheet') || viewer.mimeType.includes('excel') || viewer.mimeType.includes('csv') ? '📊'
+                                        : viewer.mimeType.includes('word') || viewer.mimeType.includes('document') ? '📝'
+                                        : '📁'}
+                                </Text>
+                                <Text style={styles.viewerFileName}>{viewer.name}</Text>
+                                <Text style={styles.viewerFileMime}>{viewer.mimeType}</Text>
+                                <Pressable onPress={() => shareDocument(viewer)} style={styles.viewerOpenBtn}>
+                                    <Text style={styles.viewerOpenBtnText}>Open / Share</Text>
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
                     <View style={styles.viewerMeta}>
                         <Text style={styles.viewerMetaText}>
@@ -172,29 +224,7 @@ export default function DocumentManagerScreen() {
                     </Pressable>
                 </View>
 
-                {/* Type filter */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.filterRow}
-                >
-                    {(['All', ...DOC_TYPES] as const).map(t => {
-                        const sel   = filterType === t;
-                        const color = t === 'All' ? Colors.chart.blue : DOC_COLORS[t];
-                        return (
-                            <Pressable
-                                key={t}
-                                onPress={() => setFilterType(t)}
-                                style={[styles.filterChip, sel && { backgroundColor: color + '25', borderColor: color }]}
-                            >
-                                {t !== 'All' && <Text style={styles.filterIcon}>{DOC_ICONS[t]}</Text>}
-                                <Text style={[styles.filterLabel, sel && { color }]}>{t}</Text>
-                            </Pressable>
-                        );
-                    })}
-                </ScrollView>
-
-                {/* Document grid */}
+                {/* Document list */}
                 {loading ? (
                     <View style={styles.center}><ActivityIndicator color={Colors.chart.blue} size="large" /></View>
                 ) : filtered.length === 0 ? (
@@ -250,18 +280,14 @@ export default function DocumentManagerScreen() {
 
                     <ScrollView contentContainerStyle={styles.modalContent}>
                         <Text style={styles.fieldLabel}>Document Type</Text>
-                        <View style={styles.typeGrid}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typeChipRow}>
                             {DOC_TYPES.map(t => {
                                 const sel   = addState.docType === t;
                                 const color = DOC_COLORS[t];
                                 return (
                                     <Pressable
                                         key={t}
-                                        onPress={() => setAddState(a => ({
-                                            ...a,
-                                            docType: t,
-                                            name: a.name || t,
-                                        }))}
+                                        onPress={() => setAddState(a => ({ ...a, docType: t, name: a.name || t }))}
                                         style={[styles.typeChip, sel && { backgroundColor: color + '25', borderColor: color }]}
                                     >
                                         <Text style={styles.typeChipIcon}>{DOC_ICONS[t]}</Text>
@@ -269,7 +295,7 @@ export default function DocumentManagerScreen() {
                                     </Pressable>
                                 );
                             })}
-                        </View>
+                        </ScrollView>
 
                         <Text style={[styles.fieldLabel, { marginTop: Spacing.xl }]}>Custom Name (optional)</Text>
                         <TextInput
@@ -300,8 +326,17 @@ export default function DocumentManagerScreen() {
                             </Pressable>
                         </View>
 
+                        <Pressable
+                            onPress={async () => { await pickFromFiles(); }}
+                            style={[styles.sourceBtn, styles.sourceBtnFull, { borderColor: Colors.chart.green }]}
+                        >
+                            <Text style={styles.sourceBtnIcon}>📂</Text>
+                            <Text style={[styles.sourceBtnLabel, { color: Colors.chart.green }]}>Files</Text>
+                            <Text style={styles.sourceBtnSub}>PDF, Excel, Word, and more</Text>
+                        </Pressable>
+
                         <Text style={styles.hint}>
-                            💡 Max file size: 4 MB · Stored securely on your device
+                            💡 Images: max 4 MB · Files: max 10 MB · Stored securely on your device
                         </Text>
                     </ScrollView>
                 </View>
@@ -325,15 +360,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
     },
     addBtnText: { color: Colors.text.white, fontWeight: '700', fontSize: FontSize.sm },
-
-    filterRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg, paddingBottom: 2 },
-    filterChip: {
-        flexDirection: 'row', alignItems: 'center', gap: 4,
-        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        borderRadius: Radii.xl, borderWidth: 1, borderColor: Colors.inputBorder,
-    },
-    filterIcon: { fontSize: 13 },
-    filterLabel: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
 
     list: { paddingHorizontal: Spacing.xl, paddingBottom: 40 },
 
@@ -360,6 +386,15 @@ const styles = StyleSheet.create({
     viewerShareText: { color: Colors.chart.green, fontSize: FontSize.sm, fontWeight: '600' },
     viewerImageArea: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', margin: Spacing.md, borderRadius: Radii.xl },
     viewerImage: { flex: 1, borderRadius: Radii.xl },
+    viewerFileIcon: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
+    viewerFileEmoji: { fontSize: 80 },
+    viewerFileName: { color: Colors.text.primary, fontSize: FontSize.body, fontWeight: '700', textAlign: 'center', paddingHorizontal: Spacing.xl },
+    viewerFileMime: { color: Colors.text.muted, fontSize: FontSize.xs },
+    viewerOpenBtn: {
+        marginTop: Spacing.md, backgroundColor: Colors.chart.blue,
+        borderRadius: Radii.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md,
+    },
+    viewerOpenBtnText: { color: Colors.text.white, fontWeight: '700', fontSize: FontSize.body },
     viewerMeta: { padding: Spacing.xl, gap: 4, alignItems: 'center' },
     viewerMetaText: { color: Colors.text.muted, fontSize: FontSize.sm },
 
@@ -377,12 +412,13 @@ const styles = StyleSheet.create({
         color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600',
         textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: Spacing.md,
     },
-    typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+    typeChipRow: { gap: Spacing.sm, paddingBottom: 2 },
     typeChip: {
-        alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        borderRadius: Radii.lg, borderWidth: 1, borderColor: Colors.inputBorder, minWidth: 80,
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+        borderRadius: Radii.xl, borderWidth: 1, borderColor: Colors.inputBorder,
     },
-    typeChipIcon: { fontSize: 22, marginBottom: 4 },
+    typeChipIcon: { fontSize: 14 },
     typeChipLabel: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
 
     nameInput: {
@@ -402,6 +438,10 @@ const styles = StyleSheet.create({
         flex: 1, alignItems: 'center', padding: Spacing.xl,
         backgroundColor: Colors.card, borderRadius: Radii.xl,
         borderWidth: 2,
+    },
+    sourceBtnFull: {
+        flex: 0, flexDirection: 'row', gap: Spacing.md,
+        marginTop: Spacing.md, justifyContent: 'center',
     },
     sourceBtnIcon: { fontSize: 36, marginBottom: Spacing.sm },
     sourceBtnLabel: { fontSize: FontSize.body, fontWeight: '700', marginBottom: 4 },

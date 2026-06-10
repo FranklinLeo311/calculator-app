@@ -213,7 +213,9 @@ export default function GoldSilverScreen() {
         setStartInput(start);
         setEndInput(today);
         setDateError('');
-    }, [presetDays]); // intentionally excludes history.length — preset resets only when user picks one
+        setSelectedIndex(null);
+        setTooltipPoint(null);
+    }, [presetDays, history]); // history needed so "All" preset recalculates when data loads
 
     function applyCustomDates() {
         if (!isValidISO(startInput)) { setDateError('Start date format: YYYY-MM-DD'); return; }
@@ -222,6 +224,8 @@ export default function GoldSilverScreen() {
         setDateError('');
         setActiveStart(startInput);
         setActiveEnd(endInput);
+        setSelectedIndex(null);
+        setTooltipPoint(null);
         // deselect preset without triggering the preset useEffect
         if (presetDays !== -1) setPresetDays(-1);
     }
@@ -301,7 +305,7 @@ export default function GoldSilverScreen() {
                         </View>
 
                         <Text style={styles.rateNote}>
-                            Rates are international spot prices. Retail prices include making charges + GST.
+                            Includes import duty (6%) + AIDC (5%) + GST (3%). Approx. Indian market rates.
                         </Text>
                     </>
                 ) : loading ? (
