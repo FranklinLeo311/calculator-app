@@ -132,7 +132,7 @@ export default function App() {
                     case 'profile':
                         return (
                             <ErrorBoundary>
-                                <ProfileScreen />
+                                <ProfileScreen isFocused={index === ROUTES.findIndex(r => r.key === 'profile')} />
                             </ErrorBoundary>
                         );
                     case 'jobs':

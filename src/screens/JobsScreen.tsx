@@ -3,185 +3,492 @@ import {
     ActivityIndicator,
     FlatList,
     Linking,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { storageGet } from '../utils/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type JobItem = {
-    id: number;
-    url: string;
+type UnifiedJob = {
+    id: string;
+    source: string;
     title: string;
-    company_name: string;
-    category: string;
-    tags: string[];
-    job_type: string;
-    publication_date: string;
-    candidate_required_location: string;
-    salary: string;
-    description: string;
-};
-
-type UserProfile = {
-    name: string;
-    title: string;
-    experienceLevel: string;
+    company: string;
     jobType: string;
-    skills: string[];
+    tags: string[];
     location: string;
-    expectedCtc: string;
+    salary: string;
+    postedAt: string;
+    applyUrl: string;
 };
 
-type FilterType = 'all' | 'full_time' | 'contract' | 'part_time';
+type UserProfile = { skills: string[]; location?: string };
+type FilterType = 'all' | 'full_time' | 'contract' | 'remote';
 
 const FILTER_LABELS: Record<FilterType, string> = {
     all: 'All',
     full_time: 'Full-time',
     contract: 'Contract',
-    part_time: 'Part-time',
+    remote: 'Remote',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const SOURCE_COLOR: Record<string, string> = {
+    Remotive:   '#3B82F6',
+    Arbeitnow:  '#10B981',
+    RemoteOK:   '#8B5CF6',
+    Jobicy:     '#F59E0B',
+    'HN Hiring': '#FF6600',
+};
 
-function timeAgo(dateStr: string): string {
-    const ms = Date.now() - new Date(dateStr).getTime();
-    const days = Math.floor(ms / 86400000);
-    if (days === 0) return 'Today';
-    if (days === 1) return '1 day ago';
-    if (days < 30) return `${days} days ago`;
-    const months = Math.floor(days / 30);
-    if (months === 1) return '1 month ago';
-    return `${months} months ago`;
+// ─── Skill detection (for HN comment parsing) ────────────────────────────────
+
+const SKILL_KEYWORDS = [
+    'react','react native','vue','angular','next.js','typescript','javascript','html','css','tailwind',
+    'node.js','node','python','java','ruby','go','php','.net','c#','swift','kotlin','flutter',
+    'spring','django','fastapi','express','rails',
+    'aws','azure','gcp','docker','kubernetes','terraform','ci/cd',
+    'postgresql','mysql','mongodb','redis','firebase','sql','graphql',
+    'machine learning','ai','llm','openai','rust','scala',
+];
+
+function extractSkillTags(text: string): string[] {
+    const lower = text.toLowerCase();
+    const found: string[] = [];
+    for (const kw of SKILL_KEYWORDS) {
+        if (lower.includes(kw) && found.length < 6) {
+            // Capitalise nicely
+            const pretty = kw === 'node.js' ? 'Node.js' : kw === 'react native' ? 'React Native' : kw === 'next.js' ? 'Next.js' : kw.charAt(0).toUpperCase() + kw.slice(1);
+            if (!found.includes(pretty)) found.push(pretty);
+        }
+    }
+    return found;
 }
 
-function jobTypeColor(jobType: string): string {
-    const t = (jobType || '').toLowerCase();
-    if (t.includes('full')) return Colors.chart.green;
-    if (t.includes('contract')) return Colors.chart.amber;
-    if (t.includes('part')) return Colors.chart.blue;
-    return Colors.text.muted;
+// ─── HTML strip / entity decode ───────────────────────────────────────────────
+
+function stripHtml(html: string): string {
+    return html
+        .replace(/<p>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        // keep href text visible
+        .replace(/<a[^>]+href="(https?:[^"]+)"[^>]*>[^<]*<\/a>/gi, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&#x2F;/g, '/')
+        .replace(/&#x27;/g, "'")
+        .replace(/&#x60;/g, '`')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/ {2,}/g, ' ')
+        .trim();
 }
 
-function jobTypeBadgeLabel(jobType: string): string {
-    const t = (jobType || '').toLowerCase();
-    if (t.includes('full')) return 'Full-time';
-    if (t.includes('contract')) return 'Contract';
-    if (t.includes('part')) return 'Part-time';
-    return jobType || 'Remote';
+// ─── HN comment → UnifiedJob ──────────────────────────────────────────────────
+
+function parseHNComment(item: any): UnifiedJob | null {
+    if (!item?.text || item.deleted || item.dead) return null;
+
+    const raw = stripHtml(item.text);
+    if (raw.length < 40) return null;
+
+    const lines = raw.split('\n').map((l: string) => l.trim()).filter(Boolean);
+    const firstLine = lines[0] ?? '';
+    const parts = firstLine.split('|').map((p: string) => p.trim());
+
+    const company = parts[0] || 'Unknown';
+
+    // Find title — look for role keyword in first line parts or first few lines
+    const rolePattern = /engineer|developer|designer|manager|analyst|scientist|architect|lead|head of|vp |director|devops|fullstack|front.?end|back.?end|mobile|intern/i;
+    let title = '';
+    for (const p of parts.slice(1, 5)) {
+        if (rolePattern.test(p) && p.length < 100) { title = p; break; }
+    }
+    if (!title) {
+        for (const line of lines.slice(1, 4)) {
+            if (rolePattern.test(line) && line.length < 120 && !line.startsWith('http')) {
+                title = line.split('|')[0].trim(); break;
+            }
+        }
+    }
+    if (!title) title = `Software Engineer at ${company}`;
+
+    // Location — find part with a city/remote keyword, else parts[1]
+    const locPattern = /remote|onsite|on-site|hybrid|usa|uk|london|berlin|new york|san francisco|toronto|austin|chicago|bangalore|india|europe/i;
+    const locPart = parts.find((p, i) => i > 0 && locPattern.test(p)) || parts[1] || 'Remote';
+    const isRemote = raw.toLowerCase().includes('remote');
+    const location = isRemote && !locPart.toLowerCase().includes('remote')
+        ? `${locPart} / Remote`
+        : locPart;
+
+    // Job type
+    let jobType = 'full_time';
+    if (/contract/i.test(firstLine)) jobType = 'contract';
+    else if (/part.?time/i.test(firstLine)) jobType = 'part_time';
+    else if (/remote/i.test(firstLine) && !/full.?time/i.test(firstLine)) jobType = 'remote';
+
+    // Salary
+    const salaryMatch = raw.match(/\$[\d,]+[kK]?\s*(?:[-–—]\s*\$?[\d,]+[kK]?)?(?:\s*(?:\/yr|\/year|per year))?/);
+    const salary = salaryMatch ? salaryMatch[0] : '';
+
+    // Apply URL — first http link in text
+    const urlMatch = raw.match(/https?:\/\/[^\s<>")\]]+/);
+    const applyUrl = urlMatch
+        ? urlMatch[0].replace(/[.,;)>]+$/, '')
+        : `https://news.ycombinator.com/item?id=${item.id}`;
+
+    return {
+        id: `hn-${item.id}`,
+        source: 'HN Hiring',
+        title: title.length > 100 ? title.slice(0, 97) + '…' : title,
+        company: company.length > 60 ? company.slice(0, 57) + '…' : company,
+        jobType,
+        tags: extractSkillTags(raw),
+        location: location.length > 60 ? location.slice(0, 57) + '…' : location,
+        salary,
+        postedAt: new Date(item.time * 1000).toISOString(),
+        applyUrl,
+    };
 }
 
-function matchesFilter(job: JobItem, filter: FilterType): boolean {
+// ─── Fetch helpers ────────────────────────────────────────────────────────────
+
+function timed(url: string, opts: RequestInit = {}, ms = 12000): Promise<Response> {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+async function getJson<T>(url: string, opts?: RequestInit): Promise<T> {
+    const r = await timed(url, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json() as Promise<T>;
+}
+
+// ─── Source normalisers ───────────────────────────────────────────────────────
+
+function normRemotive(raw: any[]): UnifiedJob[] {
+    return (raw ?? []).map(j => ({
+        id: `rem-${j.id}`,
+        source: 'Remotive',
+        title: j.title ?? '',
+        company: j.company_name ?? '',
+        jobType: j.job_type ?? 'full_time',
+        tags: Array.isArray(j.tags) ? j.tags.slice(0, 5) : [],
+        location: j.candidate_required_location || 'Remote',
+        salary: j.salary ?? '',
+        postedAt: j.publication_date ?? new Date().toISOString(),
+        applyUrl: j.url ?? '',
+    }));
+}
+
+function normArbeitnow(raw: any[]): UnifiedJob[] {
+    return (raw ?? []).map((j, i) => ({
+        id: `arb-${j.slug ?? i}`,
+        source: 'Arbeitnow',
+        title: j.title ?? '',
+        company: j.company_name ?? '',
+        jobType: Array.isArray(j.job_types) && j.job_types.length ? j.job_types[0] : (j.remote ? 'remote' : 'full_time'),
+        tags: Array.isArray(j.tags) ? j.tags.slice(0, 5) : [],
+        location: j.location || 'Remote',
+        salary: '',
+        postedAt: j.created_at ? new Date(j.created_at * 1000).toISOString() : new Date().toISOString(),
+        applyUrl: j.url ?? '',
+    }));
+}
+
+function normRemoteOK(raw: any[]): UnifiedJob[] {
+    return (raw ?? []).slice(1).map(j => ({
+        id: `rok-${j.id ?? j.slug}`,
+        source: 'RemoteOK',
+        title: j.position ?? '',
+        company: j.company ?? '',
+        jobType: 'remote',
+        tags: Array.isArray(j.tags) ? j.tags.slice(0, 5) : [],
+        location: 'Remote',
+        salary: j.salary_min && j.salary_max ? `$${j.salary_min}–$${j.salary_max}` : '',
+        postedAt: j.date ?? new Date().toISOString(),
+        applyUrl: j.url ?? '',
+    }));
+}
+
+function normJobicy(raw: any[]): UnifiedJob[] {
+    return (raw ?? []).map((j, i) => ({
+        id: `jcy-${j.id ?? i}`,
+        source: 'Jobicy',
+        title: j.jobTitle ?? '',
+        company: j.companyName ?? '',
+        jobType: (j.jobType ?? 'full_time').toLowerCase().replace(' ', '_'),
+        tags: Array.isArray(j.jobIndustry) ? j.jobIndustry.slice(0, 5) : [],
+        location: j.jobGeo || 'Remote',
+        salary: j.annualSalaryMin ? `$${j.annualSalaryMin}–$${j.annualSalaryMax ?? '?'}` : '',
+        postedAt: j.pubDate ?? new Date().toISOString(),
+        applyUrl: j.url ?? '',
+    }));
+}
+
+// ─── HN "Who is Hiring?" fetch ────────────────────────────────────────────────
+
+async function fetchHNHiringJobs(): Promise<UnifiedJob[]> {
+    // 1. Get whoishiring user's latest posts (uses Firebase — known to work)
+    const HN = 'https://hacker-news.firebaseio.com/v0';
+    const user = await getJson<{ submitted: number[] }>(`${HN}/user/whoishiring.json`);
+    const ids = user.submitted ?? [];
+
+    // 2. Find the latest "Who is Hiring?" story (not "Who Wants to Be Hired")
+    let storyId: number | null = null;
+    for (const id of ids.slice(0, 6)) {
+        const item = await getJson<{ title?: string; kids?: number[] }>(`${HN}/item/${id}.json`);
+        if (item?.title?.toLowerCase().includes('who is hiring') &&
+            item?.title?.toLowerCase().includes('hiring?')) {
+            storyId = id;
+            break;
+        }
+    }
+    if (!storyId) return [];
+
+    // 3. Fetch story to get kid comment IDs
+    const story = await getJson<{ kids?: number[] }>(`${HN}/item/${storyId}.json`);
+    const kids = (story.kids ?? []).slice(0, 40);
+    if (kids.length === 0) return [];
+
+    // 4. Fetch all comments in parallel
+    const settled = await Promise.allSettled(
+        kids.map(kid => getJson<any>(`${HN}/item/${kid}.json`))
+    );
+
+    const jobs: UnifiedJob[] = [];
+    for (const res of settled) {
+        if (res.status === 'fulfilled') {
+            const job = parseHNComment(res.value);
+            if (job) jobs.push(job);
+        }
+    }
+    return jobs;
+}
+
+// ─── Main fetch: try job boards → fall back to HN ────────────────────────────
+
+type FetchResult = { jobs: UnifiedJob[]; sourcesLoaded: number; usedHN: boolean };
+
+async function fetchAllJobs(): Promise<FetchResult> {
+    // Try all 4 job board APIs in parallel
+    const [r1, r2, r3, r4] = await Promise.allSettled([
+        getJson<any>('https://remotive.com/api/remote-jobs?category=software-dev&limit=50')
+            .then(d => normRemotive(d.jobs ?? [])),
+        getJson<any>('https://www.arbeitnow.com/api/job-board-api')
+            .then(d => normArbeitnow(d.data ?? [])),
+        getJson<any>('https://remoteok.com/api', { headers: { 'User-Agent': 'Mozilla/5.0' } })
+            .then(d => normRemoteOK(Array.isArray(d) ? d : [])),
+        getJson<any>('https://jobicy.com/api/v2/remote-jobs?count=30&tag=javascript')
+            .then(d => normJobicy(d.jobs ?? [])),
+    ]);
+
+    let combined: UnifiedJob[] = [];
+    let sourcesLoaded = 0;
+
+    for (const res of [r1, r2, r3, r4]) {
+        if (res.status === 'fulfilled' && res.value.length > 0) {
+            combined = combined.concat(res.value);
+            sourcesLoaded++;
+        }
+    }
+
+    // If no job boards responded, fall back to HN "Who is Hiring?" (Firebase always works)
+    let usedHN = false;
+    if (combined.length < 5) {
+        try {
+            const hnJobs = await fetchHNHiringJobs();
+            combined = combined.concat(hnJobs);
+            if (hnJobs.length > 0) usedHN = true;
+        } catch {
+            // HN also failed — leave combined as is
+        }
+    }
+
+    // Deduplicate by title+company
+    const seen = new Set<string>();
+    const deduped = combined.filter(j => {
+        const key = `${j.title.toLowerCase().trim()}|${j.company.toLowerCase().trim()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    // Sort newest first
+    deduped.sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
+
+    if (deduped.length === 0) throw new Error('Could not load jobs — check your internet connection and tap Retry.');
+
+    return { jobs: deduped, sourcesLoaded, usedHN };
+}
+
+// ─── Filter ───────────────────────────────────────────────────────────────────
+
+// Score how relevant a job is for a given city (e.g. "Chennai")
+// 4 = exact city match, 3 = same country/region, 2 = remote (accessible), 1 = worldwide, 0 = elsewhere
+function locationScore(job: UnifiedJob, city: string): number {
+    if (!city) return 1;
+    const loc = job.location.toLowerCase();
+    const c = city.toLowerCase();
+
+    // Extract city keyword (e.g. "chennai" from "Chennai, Tamil Nadu")
+    const cityWord = c.split(/[,\s]/)[0];
+
+    if (loc.includes(cityWord)) return 4;
+    if (loc.includes('india') || loc.includes('bengaluru') || loc.includes('bangalore') ||
+        loc.includes('hyderabad') || loc.includes('mumbai') || loc.includes('pune') ||
+        loc.includes('tamil') || loc.includes('noida') || loc.includes('gurgaon') ||
+        loc.includes('kochi') || loc.includes('coimbatore')) return 3;
+    if (loc.includes('remote') || loc.includes('worldwide') || loc.includes('anywhere') ||
+        loc === '' || job.jobType.toLowerCase().includes('remote')) return 2;
+    if (loc.includes('asia') || loc.includes('apac')) return 2;
+    return 1;
+}
+
+function matchesFilter(job: UnifiedJob, filter: FilterType): boolean {
     if (filter === 'all') return true;
-    const t = (job.job_type || '').toLowerCase();
+    const t = (job.jobType ?? '').toLowerCase();
+    if (filter === 'remote')    return t.includes('remote') || job.location.toLowerCase().includes('remote');
     if (filter === 'full_time') return t.includes('full');
-    if (filter === 'contract') return t.includes('contract');
-    if (filter === 'part_time') return t.includes('part');
+    if (filter === 'contract')  return t.includes('contract');
     return true;
 }
 
-function jobMatchesSkills(job: JobItem, skills: string[]): boolean {
-    if (skills.length === 0) return true;
-    const titleLower = job.title.toLowerCase();
-    const tagsLower = (job.tags || []).map(t => t.toLowerCase());
-    return skills.some(skill => {
-        const s = skill.toLowerCase();
-        return titleLower.includes(s) || tagsLower.some(tag => tag.includes(s));
-    });
+function timeAgo(iso: string): string {
+    const ms = Date.now() - new Date(iso).getTime();
+    const h = ms / 3600000;
+    if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
+    if (h < 24) return `${Math.floor(h)}h ago`;
+    if (h < 168) return `${Math.floor(h / 24)}d ago`;
+    return `${Math.floor(h / 168)}w ago`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function JobsScreen() {
-    const [allJobs, setAllJobs] = useState<JobItem[]>([]);
-    const [userSkills, setUserSkills] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<FilterType>('all');
-    const abortRef = useRef<AbortController | null>(null);
+    const [allJobs, setAllJobs]         = useState<UnifiedJob[]>([]);
+    const [usedHN, setUsedHN]           = useState(false);
+    const [sourcesLoaded, setSourcesLoaded] = useState(0);
+    const [userSkills, setUserSkills]   = useState<string[]>([]);
+    const [userLocation, setUserLocation] = useState('');
+    const [loading, setLoading]         = useState(true);
+    const [error, setError]             = useState<string | null>(null);
+    const [search, setSearch]           = useState('');
+    const [filter, setFilter]           = useState<FilterType>('all');
+    const isMounted = useRef(true);
 
-    const fetchJobs = useCallback(async () => {
-        if (abortRef.current) abortRef.current.abort();
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
+    useEffect(() => {
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
 
+    const loadJobs = useCallback(async () => {
+        if (!isMounted.current) return;
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(
-                'https://remotive.com/api/remote-jobs?category=software-dev&limit=50',
-                { signal: ctrl.signal },
-            );
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            setAllJobs((data.jobs as JobItem[]) || []);
+            const result = await fetchAllJobs();
+            if (!isMounted.current) return;
+            setAllJobs(result.jobs);
+            setUsedHN(result.usedHN);
+            setSourcesLoaded(result.sourcesLoaded);
         } catch (e: any) {
-            if (e?.name !== 'AbortError') {
-                setError('Failed to load jobs. Check your internet connection.');
-            }
+            if (!isMounted.current) return;
+            setError(e?.message ?? 'Failed to load jobs.');
         } finally {
-            setLoading(false);
+            if (isMounted.current) setLoading(false);
         }
     }, []);
 
-    // Load profile skills + fetch jobs on mount
     useEffect(() => {
         storageGet<UserProfile>('user_profile_v1').then(p => {
+            if (!isMounted.current) return;
             setUserSkills(p?.skills ?? []);
+            setUserLocation(p?.location ?? '');
         });
-        fetchJobs();
-        return () => abortRef.current?.abort();
-    }, [fetchJobs]);
+        loadJobs();
+    }, [loadJobs]);
 
-    // Derived list
-    const visibleJobs = allJobs.filter(job => {
-        if (!jobMatchesSkills(job, userSkills)) return false;
-        if (!matchesFilter(job, filter)) return false;
-        if (search.trim()) {
-            const q = search.trim().toLowerCase();
-            return (
-                job.title.toLowerCase().includes(q) ||
-                job.company_name.toLowerCase().includes(q)
-            );
-        }
-        return true;
-    });
+    // city extracted from profile location ("Chennai, Tamil Nadu" → "Chennai")
+    const profileCity = userLocation.split(',')[0].trim();
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    const visibleJobs = allJobs
+        .filter(job => {
+            if (!matchesFilter(job, filter)) return false;
+            if (search.trim()) {
+                const q = search.trim().toLowerCase();
+                return (
+                    job.title.toLowerCase().includes(q) ||
+                    job.company.toLowerCase().includes(q) ||
+                    job.tags.some(t => t.toLowerCase().includes(q)) ||
+                    job.location.toLowerCase().includes(q)
+                );
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            // Primary: location relevance (profile city)
+            const locDiff = locationScore(b, profileCity) - locationScore(a, profileCity);
+            if (locDiff !== 0) return locDiff;
+            // Secondary: skill match count
+            const skillsLower = userSkills.map(s => s.toLowerCase());
+            const scoreA = a.tags.filter(t => skillsLower.some(s => t.toLowerCase().includes(s))).length
+                         + (a.title.split(' ').filter(w => skillsLower.some(s => w.toLowerCase().includes(s))).length);
+            const scoreB = b.tags.filter(t => skillsLower.some(s => t.toLowerCase().includes(s))).length
+                         + (b.title.split(' ').filter(w => skillsLower.some(s => w.toLowerCase().includes(s))).length);
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            // Tertiary: newest first
+            return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+        });
 
     const renderHeader = () => (
         <View>
-            {/* Title row */}
             <View style={styles.titleRow}>
-                <View>
-                    <Text style={styles.screenTitle}>Job Search</Text>
-                    <Text style={styles.matchText}>
-                        {loading
-                            ? 'Loading jobs...'
-                            : error
-                            ? 'Error loading jobs'
-                            : `${visibleJobs.length} jobs matched your skills`}
-                    </Text>
+                <View style={styles.titleBlock}>
+                    <Text style={styles.screenTitle}>💼 Jobs</Text>
+                    {!loading && !error && (
+                        <Text style={styles.subtitle}>
+                            {visibleJobs.length} jobs
+                            {sourcesLoaded > 0 ? ` · ${sourcesLoaded} board${sourcesLoaded !== 1 ? 's' : ''}` : ''}
+                            {usedHN ? ' · HN Hiring' : ''}
+                        </Text>
+                    )}
                 </View>
-                <TouchableOpacity style={styles.refreshBtn} onPress={fetchJobs} activeOpacity={0.7}>
-                    <Text style={styles.refreshBtnText}>↻ Refresh</Text>
+                <TouchableOpacity style={styles.refreshBtn} onPress={loadJobs} activeOpacity={0.7}>
+                    <Text style={styles.refreshBtnText}>↻</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Search bar */}
+            {profileCity ? (
+                <View style={styles.locationBanner}>
+                    <Text style={styles.locationBannerText}>
+                        📍 Sorted for <Text style={{ fontWeight: '700' }}>{profileCity}</Text> — Remote & India jobs shown first · tap a skill chip to filter
+                    </Text>
+                </View>
+            ) : null}
+
+            {usedHN && sourcesLoaded === 0 && (
+                <View style={styles.hnBanner}>
+                    <Text style={styles.hnBannerText}>
+                        📡 Job boards unreachable — showing real jobs from HN "Ask HN: Who is Hiring?"
+                    </Text>
+                </View>
+            )}
+
             <View style={styles.searchRow}>
                 <TextInput
                     style={styles.searchInput}
                     value={search}
                     onChangeText={setSearch}
-                    placeholder="Search title or company..."
+                    placeholder="Search by title, company, skill…"
                     placeholderTextColor={Colors.text.muted}
                     returnKeyType="search"
                 />
@@ -192,8 +499,7 @@ export default function JobsScreen() {
                 )}
             </View>
 
-            {/* Filter chips */}
-            <View style={styles.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
                 {(Object.keys(FILTER_LABELS) as FilterType[]).map(f => (
                     <TouchableOpacity
                         key={f}
@@ -206,134 +512,125 @@ export default function JobsScreen() {
                         </Text>
                     </TouchableOpacity>
                 ))}
-            </View>
+            </ScrollView>
 
-            {/* Skills info */}
             {userSkills.length > 0 && (
-                <View style={styles.skillsInfoRow}>
-                    <Text style={styles.skillsInfoText}>
-                        Filtering by {userSkills.length} skills from your profile
-                    </Text>
-                </View>
-            )}
-            {userSkills.length === 0 && !loading && (
-                <View style={styles.skillsInfoRow}>
-                    <Text style={styles.skillsInfoText}>
-                        Set skills in your Profile tab to get personalized matches
-                    </Text>
-                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
+                    {userSkills.slice(0, 8).map(s => (
+                        <TouchableOpacity key={s} style={styles.skillChip} onPress={() => setSearch(s)} activeOpacity={0.7}>
+                            <Text style={styles.skillChipText}>{s}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
             )}
         </View>
     );
 
     if (loading) {
         return (
-            <GradientBackground>
-                {renderHeader()}
+            <View style={styles.root}>
+                <View style={styles.loadingPadding}>{renderHeader()}</View>
                 <View style={styles.centerBox}>
                     <ActivityIndicator size="large" color={Colors.accent} />
-                    <Text style={styles.loadingText}>Fetching remote jobs...</Text>
+                    <Text style={styles.loadingText}>Finding jobs…</Text>
+                    <Text style={styles.loadingSubText}>Trying multiple sources…</Text>
                 </View>
-            </GradientBackground>
+            </View>
         );
     }
 
     if (error) {
         return (
-            <GradientBackground>
-                <View style={styles.container}>
-                    {renderHeader()}
-                    <View style={styles.centerBox}>
-                        <Text style={styles.errorText}>{error}</Text>
-                        <TouchableOpacity style={styles.retryBtn} onPress={fetchJobs}>
-                            <Text style={styles.retryBtnText}>Retry</Text>
-                        </TouchableOpacity>
-                    </View>
+            <View style={styles.root}>
+                <View style={styles.loadingPadding}>{renderHeader()}</View>
+                <View style={styles.centerBox}>
+                    <Text style={styles.errorIcon}>📡</Text>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity style={styles.retryBtn} onPress={loadJobs} activeOpacity={0.8}>
+                        <Text style={styles.retryBtnText}>↻  Retry</Text>
+                    </TouchableOpacity>
                 </View>
-            </GradientBackground>
+            </View>
         );
     }
 
     return (
-        <GradientBackground>
+        <View style={styles.root}>
             <FlatList
                 data={visibleJobs}
-                keyExtractor={item => String(item.id)}
+                keyExtractor={item => item.id}
                 contentContainerStyle={styles.listContent}
                 ListHeaderComponent={renderHeader}
                 ListEmptyComponent={
                     <View style={styles.emptyBox}>
                         <Text style={styles.emptyIcon}>🔍</Text>
-                        <Text style={styles.emptyText}>No jobs matched your criteria</Text>
-                        <Text style={styles.emptySubText}>Try adjusting your search or skills</Text>
+                        <Text style={styles.emptyText}>No results</Text>
+                        <Text style={styles.emptySubText}>Try a different search term or filter</Text>
+                        <TouchableOpacity style={styles.clearSearchBtn} onPress={() => { setSearch(''); setFilter('all'); }}>
+                            <Text style={styles.clearSearchBtnText}>Clear filters</Text>
+                        </TouchableOpacity>
                     </View>
                 }
                 renderItem={({ item }) => <JobCard job={item} />}
                 showsVerticalScrollIndicator={false}
             />
-        </GradientBackground>
+        </View>
     );
 }
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job }: { job: JobItem }) {
-    const borderColor = jobTypeColor(job.job_type);
-    const firstTags = (job.tags || []).slice(0, 3);
+function isIndiaOrRemote(location: string): boolean {
+    const l = location.toLowerCase();
+    return l.includes('remote') || l.includes('india') || l.includes('chennai') ||
+        l.includes('bangalore') || l.includes('bengaluru') || l.includes('hyderabad') ||
+        l.includes('mumbai') || l.includes('pune') || l.includes('worldwide') || l === '';
+}
+
+function JobCard({ job }: { job: UnifiedJob }) {
+    const borderColor = SOURCE_COLOR[job.source] ?? Colors.accent;
 
     const handleApply = () => {
-        if (job.url) Linking.openURL(job.url).catch(() => {});
+        if (job.applyUrl) Linking.openURL(job.applyUrl).catch(() => {});
     };
 
     return (
         <View style={[styles.card, { borderLeftColor: borderColor }]}>
-            {/* Company row */}
             <View style={styles.cardTopRow}>
-                <Text style={styles.companyName} numberOfLines={1}>
-                    {job.company_name}
-                </Text>
-                <View style={[styles.jobTypeBadge, { backgroundColor: borderColor + '25' }]}>
-                    <Text style={[styles.jobTypeBadgeText, { color: borderColor }]}>
-                        {jobTypeBadgeLabel(job.job_type)}
-                    </Text>
+                <Text style={styles.companyName} numberOfLines={1}>{job.company}</Text>
+                <View style={[styles.sourceBadge, { backgroundColor: borderColor + '22' }]}>
+                    <Text style={[styles.sourceBadgeText, { color: borderColor }]}>{job.source}</Text>
                 </View>
             </View>
 
-            {/* Title */}
             <Text style={styles.jobTitle} numberOfLines={2}>{job.title}</Text>
 
-            {/* Location */}
-            {!!job.candidate_required_location && (
-                <Text style={styles.jobMeta} numberOfLines={1}>
-                    📍 {job.candidate_required_location}
-                </Text>
-            )}
-
-            {/* Salary */}
-            {!!job.salary && (
-                <Text style={styles.jobMeta} numberOfLines={1}>
-                    💰 {job.salary}
-                </Text>
-            )}
-
-            {/* Tags */}
-            {firstTags.length > 0 && (
+            {job.tags.length > 0 && (
                 <View style={styles.tagsRow}>
-                    {firstTags.map((tag, i) => (
+                    {job.tags.map((tag, i) => (
                         <View key={i} style={styles.tagChip}>
-                            <Text style={styles.tagChipText}>🏷 {tag}</Text>
+                            <Text style={styles.tagChipText}>{tag}</Text>
                         </View>
                     ))}
                 </View>
             )}
 
-            {/* Footer */}
-            <View style={styles.cardFooter}>
-                <Text style={styles.postedDate}>{timeAgo(job.publication_date)}</Text>
-                <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
-                    <Text style={styles.applyBtnText}>Apply →</Text>
-                </TouchableOpacity>
+            <View style={styles.metaRow}>
+                {!!job.location && (
+                    <Text style={[
+                        styles.metaText,
+                        isIndiaOrRemote(job.location) && styles.metaTextHighlight,
+                    ]}>
+                        📍 {job.location}
+                    </Text>
+                )}
+                {!!job.salary && <Text style={styles.metaText}>  💰 {job.salary}</Text>}
+                <Text style={styles.metaText}>  🕐 {timeAgo(job.postedAt)}</Text>
             </View>
+
+            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
+                <Text style={styles.applyBtnText}>Apply →</Text>
+            </TouchableOpacity>
         </View>
     );
 }
@@ -341,220 +638,80 @@ function JobCard({ job }: { job: JobItem }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
-    listContent: {
-        padding: Spacing.xl,
-        paddingTop: Spacing.xxl,
-        paddingBottom: 32,
-    },
+    root: { flex: 1, backgroundColor: Colors.background },
+    loadingPadding: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xxl },
+    listContent: { padding: Spacing.xl, paddingTop: Spacing.xxl, paddingBottom: 32 },
 
-    // Title row
-    titleRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: Spacing.lg,
-    },
-    screenTitle: {
-        color: Colors.text.primary,
-        fontSize: FontSize.xl,
-        fontWeight: '700',
-    },
-    matchText: {
-        color: Colors.accent,
-        fontSize: FontSize.sm,
-        marginTop: 2,
-    },
-    refreshBtn: {
-        backgroundColor: Colors.accentSoft,
-        borderRadius: Radii.lg,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.sm,
-    },
-    refreshBtnText: {
-        color: Colors.accent,
-        fontSize: FontSize.sm,
-        fontWeight: '600',
-    },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.lg },
+    titleBlock: { flex: 1 },
+    screenTitle: { color: Colors.text.primary, fontSize: FontSize.xl, fontWeight: '700' },
+    subtitle: { color: Colors.accent, fontSize: FontSize.sm, marginTop: 2 },
+    refreshBtn: { backgroundColor: Colors.accentSoft, borderRadius: Radii.lg, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    refreshBtnText: { color: Colors.accent, fontSize: FontSize.lg, fontWeight: '700' },
 
-    // Search
-    searchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.input,
-        borderWidth: 1,
-        borderColor: Colors.inputBorder,
+    locationBanner: {
+        backgroundColor: 'rgba(59,130,246,0.10)',
         borderRadius: Radii.md,
-        paddingHorizontal: Spacing.lg,
+        borderLeftWidth: 3,
+        borderLeftColor: Colors.accent,
+        padding: Spacing.md,
         marginBottom: Spacing.lg,
     },
-    searchInput: {
-        flex: 1,
-        paddingVertical: Spacing.md,
-        color: Colors.text.primary,
-        fontSize: FontSize.body,
+    locationBannerText: { color: Colors.accent, fontSize: FontSize.xs, lineHeight: 18 },
+    metaTextHighlight: { color: '#10B981', fontWeight: '600' },
+
+    hnBanner: {
+        backgroundColor: 'rgba(255,102,0,0.12)',
+        borderRadius: Radii.md,
+        borderLeftWidth: 3,
+        borderLeftColor: '#FF6600',
+        padding: Spacing.md,
+        marginBottom: Spacing.lg,
     },
+    hnBannerText: { color: '#FF6600', fontSize: FontSize.xs, lineHeight: 18 },
+
+    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.input, borderWidth: 1, borderColor: Colors.inputBorder, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
+    searchInput: { flex: 1, paddingVertical: Spacing.md, color: Colors.text.primary, fontSize: FontSize.body },
     clearBtn: { padding: Spacing.sm },
     clearBtnText: { color: Colors.text.muted, fontSize: FontSize.body },
 
-    // Filter chips
-    filterRow: {
-        flexDirection: 'row',
-        gap: Spacing.sm,
-        marginBottom: Spacing.lg,
-        flexWrap: 'wrap',
-    },
-    filterChip: {
-        borderWidth: 1,
-        borderColor: Colors.inputBorder,
-        borderRadius: Radii.lg,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.xs + 2,
-    },
-    filterChipActive: {
-        backgroundColor: Colors.accent,
-        borderColor: Colors.accent,
-    },
-    filterChipText: {
-        color: Colors.text.secondary,
-        fontSize: FontSize.xs,
-        fontWeight: '600',
-    },
+    filterRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.md, paddingRight: Spacing.xl },
+    filterChip: { borderWidth: 1, borderColor: Colors.inputBorder, borderRadius: Radii.lg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xs + 2 },
+    filterChipActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+    filterChipText: { color: Colors.text.secondary, fontSize: FontSize.xs, fontWeight: '600' },
     filterChipTextActive: { color: '#fff' },
 
-    // Skills info
-    skillsInfoRow: {
-        backgroundColor: Colors.accentSoft,
-        borderRadius: Radii.md,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.sm,
-        marginBottom: Spacing.lg,
-    },
-    skillsInfoText: {
-        color: Colors.accent,
-        fontSize: FontSize.xs,
-    },
+    skillsRow: { flexDirection: 'row', gap: 6, paddingBottom: Spacing.lg, paddingRight: Spacing.xl },
+    skillChip: { backgroundColor: Colors.accentSoft, borderRadius: Radii.xl, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
+    skillChipText: { color: Colors.accent, fontSize: FontSize.xs, fontWeight: '600' },
 
-    // Center states
-    centerBox: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: Spacing.xl,
-    },
-    loadingText: {
-        color: Colors.text.secondary,
-        fontSize: FontSize.body,
-        marginTop: Spacing.lg,
-    },
-    errorText: {
-        color: Colors.error,
-        fontSize: FontSize.body,
-        textAlign: 'center',
-        marginBottom: Spacing.xl,
-    },
-    retryBtn: {
-        backgroundColor: Colors.accent,
-        borderRadius: Radii.lg,
-        paddingHorizontal: Spacing.xxl,
-        paddingVertical: Spacing.lg,
-    },
-    retryBtnText: { color: '#fff', fontWeight: '700' },
+    centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+    loadingText: { color: Colors.text.secondary, fontSize: FontSize.body, marginTop: Spacing.lg },
+    loadingSubText: { color: Colors.text.muted, fontSize: FontSize.sm, marginTop: 4 },
 
-    // Empty
-    emptyBox: { alignItems: 'center', paddingTop: Spacing.xxxl * 2 },
+    errorIcon: { fontSize: 40, marginBottom: Spacing.lg },
+    errorText: { color: Colors.error, fontSize: FontSize.sm, textAlign: 'center', marginBottom: Spacing.xl, lineHeight: 20 },
+    retryBtn: { backgroundColor: Colors.accent, borderRadius: Radii.lg, paddingHorizontal: Spacing.xxl, paddingVertical: Spacing.lg },
+    retryBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.body },
+
+    emptyBox: { alignItems: 'center', paddingTop: 60 },
     emptyIcon: { fontSize: 40, marginBottom: Spacing.lg },
-    emptyText: {
-        color: Colors.text.primary,
-        fontSize: FontSize.lg,
-        fontWeight: '600',
-        marginBottom: Spacing.sm,
-    },
-    emptySubText: {
-        color: Colors.text.muted,
-        fontSize: FontSize.sm,
-    },
+    emptyText: { color: Colors.text.primary, fontSize: FontSize.lg, fontWeight: '600', marginBottom: Spacing.sm },
+    emptySubText: { color: Colors.text.muted, fontSize: FontSize.sm, marginBottom: Spacing.xl },
+    clearSearchBtn: { backgroundColor: Colors.accent, borderRadius: Radii.lg, paddingHorizontal: Spacing.xxl, paddingVertical: Spacing.lg },
+    clearSearchBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.body },
 
-    // Job card
-    card: {
-        backgroundColor: Colors.card,
-        borderRadius: Radii.xl,
-        borderWidth: 1,
-        borderColor: Colors.cardBorder,
-        borderLeftWidth: 4,
-        padding: Spacing.xl,
-        marginBottom: Spacing.xl,
-    },
-    cardTopRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: Spacing.sm,
-    },
-    companyName: {
-        color: Colors.text.secondary,
-        fontSize: FontSize.sm,
-        fontWeight: '600',
-        flex: 1,
-        marginRight: Spacing.sm,
-    },
-    jobTypeBadge: {
-        borderRadius: Radii.sm,
-        paddingHorizontal: Spacing.sm,
-        paddingVertical: 2,
-    },
-    jobTypeBadgeText: {
-        fontSize: FontSize.xs,
-        fontWeight: '700',
-    },
-    jobTitle: {
-        color: Colors.text.primary,
-        fontSize: FontSize.body,
-        fontWeight: '700',
-        marginBottom: Spacing.sm,
-        lineHeight: FontSize.body * 1.4,
-    },
-    jobMeta: {
-        color: Colors.text.secondary,
-        fontSize: FontSize.sm,
-        marginBottom: Spacing.xs,
-    },
-    tagsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: Spacing.xs,
-        marginTop: Spacing.sm,
-        marginBottom: Spacing.sm,
-    },
-    tagChip: {
-        backgroundColor: Colors.surface,
-        borderRadius: Radii.sm,
-        paddingHorizontal: Spacing.sm,
-        paddingVertical: 2,
-    },
-    tagChipText: {
-        color: Colors.text.muted,
-        fontSize: FontSize.xs,
-    },
-    cardFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: Spacing.md,
-    },
-    postedDate: {
-        color: Colors.text.muted,
-        fontSize: FontSize.xs,
-    },
-    applyBtn: {
-        backgroundColor: Colors.accent,
-        borderRadius: Radii.lg,
-        paddingHorizontal: Spacing.xl,
-        paddingVertical: Spacing.sm,
-    },
-    applyBtnText: {
-        color: '#fff',
-        fontSize: FontSize.sm,
-        fontWeight: '700',
-    },
+    card: { backgroundColor: Colors.card, borderRadius: Radii.xl, borderWidth: 1, borderColor: Colors.cardBorder, borderLeftWidth: 3, padding: Spacing.xl, marginBottom: Spacing.lg },
+    cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
+    companyName: { color: Colors.text.secondary, fontSize: FontSize.sm, fontWeight: '600', flex: 1, marginRight: Spacing.sm },
+    sourceBadge: { borderRadius: Radii.sm, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
+    sourceBadgeText: { fontSize: FontSize.xs, fontWeight: '700' },
+    jobTitle: { color: Colors.text.primary, fontSize: FontSize.body, fontWeight: '700', marginBottom: Spacing.sm, lineHeight: FontSize.body * 1.4 },
+    tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: Spacing.sm },
+    tagChip: { backgroundColor: Colors.surface, borderRadius: Radii.sm, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
+    tagChipText: { color: Colors.text.muted, fontSize: FontSize.xs },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: Spacing.md },
+    metaText: { color: Colors.text.secondary, fontSize: FontSize.xs },
+    applyBtn: { backgroundColor: Colors.accent, borderRadius: Radii.lg, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, alignSelf: 'flex-end' },
+    applyBtnText: { color: '#fff', fontSize: FontSize.sm, fontWeight: '700' },
 });

@@ -10,6 +10,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { storageGet, storageRemove, storageSet } from '../utils/storage';
@@ -28,6 +30,16 @@ type AppSettings = {
     jobsResultLimit: number;
     appName: string;
     showTechNewsOnOpen: boolean;
+    // Appearance
+    fontSize: 'Small' | 'Default' | 'Large';
+    dateFormat: 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+    // Privacy
+    clipboardClearSeconds: number;  // 0 = disabled
+    // Jobs
+    jobAlertKeywords: string;       // comma-separated
+    hideSalarylesJobs: boolean;
+    // Notifications
+    jobsNotifyEnabled: boolean;
 };
 
 const DEFAULTS: AppSettings = {
@@ -39,6 +51,12 @@ const DEFAULTS: AppSettings = {
     jobsResultLimit: 50,
     appName: 'My Calc',
     showTechNewsOnOpen: false,
+    fontSize: 'Default',
+    dateFormat: 'DD/MM/YYYY',
+    clipboardClearSeconds: 30,
+    jobAlertKeywords: 'React, Node.js',
+    hideSalarylesJobs: false,
+    jobsNotifyEnabled: false,
 };
 
 const STORAGE_KEY = 'app_settings_v1';
@@ -159,14 +177,17 @@ export default function SettingsScreen() {
             await storageSet('user_resume_v1', toSave);
             setResume(toSave);
 
-            // Auto-fill profile from resume
+            // Auto-fill profile from resume — also save resume metadata so ProfileScreen can display it
             const existingProfile = await storageGet<any>('user_profile_v1') ?? {};
             const updatedProfile = {
                 ...existingProfile,
-                name:      parsed.name     ?? existingProfile.name     ?? '',
-                title:     parsed.title    ?? existingProfile.title    ?? '',
-                location:  existingProfile.location || 'Chennai, Tamil Nadu',
-                skills:    parsed.skills.length > 0 ? parsed.skills : (existingProfile.skills ?? []),
+                name:             parsed.name  ?? existingProfile.name  ?? '',
+                title:            parsed.title ?? existingProfile.title ?? '',
+                location:         existingProfile.location || 'Chennai, Tamil Nadu',
+                skills:           parsed.skills.length > 0 ? parsed.skills : (existingProfile.skills ?? []),
+                resumeFileName:   parsed.fileName,
+                resumeSizeKb:     parsed.sizeKb,
+                resumeBase64Uri:  parsed.base64Uri,
             };
             await storageSet('user_profile_v1', updatedProfile);
             setSavedAt(Date.now());
@@ -191,6 +212,28 @@ export default function SettingsScreen() {
                 setSavedAt(Date.now());
             }},
         ]);
+    };
+
+    const exportData = async () => {
+        try {
+            const keys = [
+                'calc_history_standard_v1',
+                'user_profile_v1',
+                'app_settings_v1',
+                'metal_rates_history_v2',
+            ];
+            const pairs = await AsyncStorage.multiGet(keys);
+            const obj: Record<string, any> = {};
+            for (const [k, v] of pairs) {
+                try { obj[k] = v ? JSON.parse(v) : null; } catch { obj[k] = v; }
+            }
+            const json = JSON.stringify(obj, null, 2);
+            const path = (FileSystem.cacheDirectory ?? '') + 'mycalc_export.json';
+            await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+            await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: 'Export App Data' });
+        } catch (err: any) {
+            Alert.alert('Export Failed', err?.message ?? 'Could not export data.');
+        }
     };
 
     const clearAllData = () => {
@@ -392,9 +435,98 @@ export default function SettingsScreen() {
                     </SettingRow>
                 </View>
 
+                {/* ── Appearance ───────────────────────────────────────── */}
+                <SectionHeader label="Appearance" />
+                <View style={styles.card}>
+                    <View style={styles.chipSettingRow}>
+                        <Text style={styles.rowLabel}>Font Size</Text>
+                        <View style={styles.chipRowInline}>
+                            {(['Small', 'Default', 'Large'] as const).map(opt => (
+                                <TouchableOpacity
+                                    key={opt}
+                                    style={[styles.optChip, settings.fontSize === opt && styles.optChipActive]}
+                                    onPress={() => updateImmediate('fontSize', opt)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={[styles.optChipText, settings.fontSize === opt && styles.optChipTextActive]}>
+                                        {opt}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                    <Divider />
+                    <View style={styles.chipSettingRow}>
+                        <Text style={styles.rowLabel}>Date Format</Text>
+                        <View style={styles.chipRowInline}>
+                            {(['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as const).map(opt => (
+                                <TouchableOpacity
+                                    key={opt}
+                                    style={[styles.optChip, settings.dateFormat === opt && styles.optChipActive]}
+                                    onPress={() => updateImmediate('dateFormat', opt)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={[styles.optChipText, settings.dateFormat === opt && styles.optChipTextActive]}>
+                                        {opt}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                </View>
+
+                {/* ── Privacy ──────────────────────────────────────────── */}
+                <SectionHeader label="Privacy" />
+                <View style={styles.card}>
+                    <View style={styles.chipSettingRow}>
+                        <View>
+                            <Text style={styles.rowLabel}>Auto-clear Clipboard</Text>
+                            <Text style={styles.helperText}>Clear copied results after N seconds (0 = off)</Text>
+                        </View>
+                    </View>
+                    <View style={{ height: Spacing.sm }} />
+                    {stepper('clipboardClearSeconds', settings.clipboardClearSeconds, 0, 120, 10, 's')}
+                </View>
+
+                {/* ── Jobs (extended) ───────────────────────────────────── */}
+                <SectionHeader label="Job Alerts" />
+                <View style={styles.card}>
+                    <View style={styles.chipSettingRow}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.rowLabel}>Alert Keywords</Text>
+                            <Text style={styles.helperText}>Comma-separated (e.g. React, Node.js, Senior)</Text>
+                        </View>
+                    </View>
+                    <TextInput
+                        style={[styles.inlineInput, { marginTop: Spacing.sm, flex: 0, width: '100%' }]}
+                        value={settings.jobAlertKeywords}
+                        onChangeText={v => updateDebounced('jobAlertKeywords', v)}
+                        placeholder="React, Node.js, Senior"
+                        placeholderTextColor={Colors.text.muted}
+                        returnKeyType="done"
+                    />
+                    <Divider />
+                    <SettingRow label="Hide Jobs Without Salary">
+                        <Switch
+                            value={settings.hideSalarylesJobs}
+                            onValueChange={v => updateImmediate('hideSalarylesJobs', v)}
+                            trackColor={{ false: Colors.inputBorder, true: Colors.accentSoft }}
+                            thumbColor={settings.hideSalarylesJobs ? Colors.accent : Colors.text.muted}
+                        />
+                    </SettingRow>
+                </View>
+
                 {/* ── Data Management ──────────────────────────────────── */}
                 <SectionHeader label="Data Management" />
                 <View style={styles.card}>
+                    <TouchableOpacity
+                        style={styles.exportBtn}
+                        onPress={exportData}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.exportBtnText}>📤 Export All Data (JSON)</Text>
+                    </TouchableOpacity>
+                    <View style={{ height: Spacing.sm }} />
                     <TouchableOpacity
                         style={styles.dangerBtn}
                         onPress={() => {
@@ -434,6 +566,8 @@ export default function SettingsScreen() {
                 <SectionHeader label="About" />
                 <View style={styles.card}>
                     <AboutRow label="Version" value="1.0.0" />
+                    <Divider />
+                    <AboutRow label="Developer" value="Franklin" />
                     <Divider />
                     <AboutRow label="Built with" value="React Native · Expo SDK 48" />
                     <Divider />
@@ -734,6 +868,51 @@ const styles = StyleSheet.create({
         color: Colors.accent,
         fontSize: FontSize.xs,
         fontWeight: '600',
+    },
+
+    // Export button
+    exportBtn: {
+        backgroundColor: Colors.accentSoft,
+        borderRadius: Radii.md,
+        paddingVertical: Spacing.lg,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: Colors.accent + '40',
+    },
+    exportBtnText: {
+        color: Colors.accent,
+        fontSize: FontSize.sm,
+        fontWeight: '700',
+    },
+
+    // Chip option row (for font size, date format)
+    chipSettingRow: {
+        paddingVertical: Spacing.lg,
+    },
+    chipRowInline: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: Spacing.sm,
+    },
+    optChip: {
+        borderWidth: 1,
+        borderColor: Colors.inputBorder,
+        borderRadius: Radii.xl,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    optChipActive: {
+        backgroundColor: Colors.accent,
+        borderColor: Colors.accent,
+    },
+    optChipText: {
+        color: Colors.text.secondary,
+        fontSize: FontSize.xs,
+        fontWeight: '600',
+    },
+    optChipTextActive: {
+        color: '#fff',
     },
 
     // About
