@@ -14,7 +14,9 @@ import UnitConverterScreen from './src/screens/UnitConverterScreen';
 import TechNewsScreen from './src/screens/TechNewsScreen';
 import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
 import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
-import JobTrackerScreen from './src/screens/JobTrackerScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import JobsScreen from './src/screens/JobsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { Colors, FontSize } from './src/config/theme';
 
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
@@ -28,10 +30,12 @@ const ROUTES = [
     { key: 'tools',     title: 'Tools'     },
     { key: 'currency',  title: '🌍 Currency' },
     { key: 'units',     title: '📐 Units'    },
-    { key: 'news',      title: '📰 Tech'   },
-    { key: 'passwords', title: '🔐 Vault'  },
-    { key: 'documents', title: '📁 Docs'   },
-    { key: 'jobs',      title: '💼 Jobs'   },
+    { key: 'news',      title: '📰 Tech'      },
+    { key: 'passwords', title: '🔐 Vault'     },
+    { key: 'documents', title: '📁 Docs'      },
+    { key: 'profile',   title: '👤 Profile'   },
+    { key: 'jobs',      title: '💼 Jobs'      },
+    { key: 'settings',  title: '⚙️ Settings'  },
 ] as const;
 
 type RouteKey = typeof ROUTES[number]['key'];
@@ -125,10 +129,22 @@ export default function App() {
                                 <DocumentManagerScreen />
                             </ErrorBoundary>
                         );
+                    case 'profile':
+                        return (
+                            <ErrorBoundary>
+                                <ProfileScreen />
+                            </ErrorBoundary>
+                        );
                     case 'jobs':
                         return (
                             <ErrorBoundary>
-                                <JobTrackerScreen />
+                                <JobsScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'settings':
+                        return (
+                            <ErrorBoundary>
+                                <SettingsScreen />
                             </ErrorBoundary>
                         );
                     default:
