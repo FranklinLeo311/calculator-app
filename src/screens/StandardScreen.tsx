@@ -5,20 +5,24 @@ import Display from '../components/Display';
 import ButtonGrid from '../components/ButtonGrid';
 import HistoryItemCard from '../components/HistoryItemCard';
 import { STANDARD_LAYOUT } from '../config/buttonLayouts';
-import type { CalcActions } from '../components/ButtonGrid';
+import useCalculator from '../hooks/useCalculator';
 import type { HistoryItem } from '../hooks/useCalculator';
+import type { CalcActions } from '../components/ButtonGrid';
 import { Colors, FontSize, Spacing, Radii } from '../config/theme';
 
-type Props = {
-    expression: string;
-    result: string;
-    actions: CalcActions;
-    history: HistoryItem[];
-    onHistorySelect: (item: HistoryItem) => void;
-    onHistoryClear: () => void;
-};
-
-export default function StandardScreen({ expression, result, actions, history, onHistorySelect, onHistoryClear }: Props) {
+export default function StandardScreen() {
+    const calc = useCalculator('calc_history_standard_v1');
+    const { expression, result, history } = calc;
+    const onHistorySelect = calc.loadFromHistory;
+    const onHistoryClear = calc.clearHistory;
+    const actions: CalcActions = {
+        input: calc.input,
+        inputOperator: calc.inputOperator,
+        clearEntry: calc.clearEntry,
+        backspace: calc.backspace,
+        toggleSign: calc.toggleSign,
+        evaluateExpression: calc.evaluateExpression,
+    };
     return (
         <GradientBackground>
             {/* Top: display + history — flex:1 fills space above buttons */}

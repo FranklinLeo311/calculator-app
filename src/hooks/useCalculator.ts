@@ -23,13 +23,16 @@ export default function useCalculator(storageKey = 'calc_history_v1') {
         });
     }, [storageKey]);
 
-    // Live-evaluate as user types — synchronous, no await
+    // Live-evaluate as user types — debounced 80ms so rapid taps don't block JS thread
     useEffect(() => {
         if (!expression) { setResult('0'); return; }
-        try {
-            const { value } = safeEvaluate(expression);
-            if (value) setResult(value);
-        } catch {}
+        const t = setTimeout(() => {
+            try {
+                const { value } = safeEvaluate(expression);
+                if (value) setResult(value);
+            } catch {}
+        }, 80);
+        return () => clearTimeout(t);
     }, [expression]);
 
     const input = useCallback((value: string) => {

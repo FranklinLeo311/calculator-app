@@ -52,11 +52,7 @@ const styles = StyleSheet.create({
     wrapper: {
         flex: 1,
         borderRadius: 10,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
+        // no elevation — 20 shadow layers per frame kills Android GPU
     },
     button: {
         flex: 1,

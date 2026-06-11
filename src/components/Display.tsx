@@ -7,7 +7,7 @@ type Props = {
     result: string;
 };
 
-export default function Display({ formula, result }: Props) {
+export default React.memo(function Display({ formula, result }: Props) {
     const displayFormula = formula?.trim() ? formula : '0';
     const displayResult = result?.trim() ? result : '0';
 
@@ -33,7 +33,7 @@ export default function Display({ formula, result }: Props) {
             </View>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -46,11 +46,7 @@ const styles = StyleSheet.create({
         padding: Spacing.xxl,
         borderWidth: 1,
         borderColor: Colors.surfaceBorder,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 8,
+        // removed heavy elevation/shadow — repainted every keystroke
     },
     formula: {
         color: Colors.text.secondary,

@@ -1,7 +1,6 @@
 import React from 'react';
 import { SafeAreaView, StyleSheet, Dimensions } from 'react-native';
 import { TabView, TabBar } from 'react-native-tab-view';
-import useCalculator from './src/hooks/useCalculator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import StandardScreen from './src/screens/StandardScreen';
 // import ScientificScreen from './src/screens/ScientificScreen';
@@ -41,8 +40,8 @@ const ROUTES = [
 type RouteKey = typeof ROUTES[number]['key'];
 
 export default function App() {
-    const standardCalc = useCalculator('calc_history_standard_v1');
     const [index, setIndex] = React.useState(0);
+    const profileIndex = ROUTES.findIndex(r => r.key === 'profile');
 
     const renderScene = React.useCallback(
         ({ route }: { route: { key: string } }) => {
@@ -51,14 +50,7 @@ export default function App() {
                     case 'standard':
                         return (
                             <ErrorBoundary>
-                                <StandardScreen
-                                    expression={standardCalc.expression}
-                                    result={standardCalc.result}
-                                    actions={standardCalc}
-                                    history={standardCalc.history}
-                                    onHistorySelect={standardCalc.loadFromHistory}
-                                    onHistoryClear={standardCalc.clearHistory}
-                                />
+                                <StandardScreen />
                             </ErrorBoundary>
                         );
                     // case 'scientific':
@@ -132,7 +124,7 @@ export default function App() {
                     case 'profile':
                         return (
                             <ErrorBoundary>
-                                <ProfileScreen isFocused={index === ROUTES.findIndex(r => r.key === 'profile')} />
+                                <ProfileScreen isFocused={index === profileIndex} />
                             </ErrorBoundary>
                         );
                     case 'jobs':
@@ -154,7 +146,7 @@ export default function App() {
                 return null;
             }
         },
-        [standardCalc],
+        [index],
     );
 
     return (
