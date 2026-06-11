@@ -21,41 +21,42 @@ type Props = {
 export default function StandardScreen({ expression, result, actions, history, onHistorySelect, onHistoryClear }: Props) {
     return (
         <GradientBackground>
-            <View style={{ flex: 1 }}>
-            <Display formula={expression} result={result} />
+            {/* Top: display + history — flex:1 fills space above buttons */}
+            <View style={styles.top}>
+                <Display formula={expression} result={result} />
 
-            {/* History section */}
-            <View style={styles.historySection}>
-                <View style={styles.historyHeader}>
-                    <Text style={styles.historyTitle}>History</Text>
-                    {history.length > 0 && (
-                        <TouchableOpacity onPress={onHistoryClear} style={styles.clearBtn} activeOpacity={0.7}>
-                            <Text style={styles.clearBtnText}>Clear</Text>
-                        </TouchableOpacity>
+                <View style={styles.historySection}>
+                    <View style={styles.historyHeader}>
+                        <Text style={styles.historyTitle}>History</Text>
+                        {history.length > 0 && (
+                            <TouchableOpacity onPress={onHistoryClear} style={styles.clearBtn} activeOpacity={0.7}>
+                                <Text style={styles.clearBtnText}>Clear</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {history.length === 0 ? (
+                        <Text style={styles.emptyText}>No calculations yet</Text>
+                    ) : (
+                        <FlatList
+                            data={history}
+                            keyExtractor={item => item.id}
+                            renderItem={({ item, index }) => (
+                                <HistoryItemCard
+                                    item={item}
+                                    onSelect={onHistorySelect}
+                                    isLast={index === history.length - 1}
+                                />
+                            )}
+                            contentContainerStyle={styles.listContent}
+                            showsVerticalScrollIndicator={false}
+                        />
                     )}
                 </View>
-
-                {history.length === 0 ? (
-                    <Text style={styles.emptyText}>No calculations yet</Text>
-                ) : (
-                    <FlatList
-                        data={history}
-                        keyExtractor={item => item.id}
-                        renderItem={({ item, index }) => (
-                            <HistoryItemCard
-                                item={item}
-                                onSelect={onHistorySelect}
-                                isLast={index === history.length - 1}
-                            />
-                        )}
-                        contentContainerStyle={styles.listContent}
-                        showsVerticalScrollIndicator={false}
-                    />
-                )}
             </View>
 
-            </View>
-            <View style={{ flexShrink: 0 }}>
+            {/* Bottom: buttons — always pinned, never pushed off screen */}
+            <View style={styles.buttonArea}>
                 <ButtonGrid layout={STANDARD_LAYOUT} actions={actions} />
             </View>
         </GradientBackground>
@@ -63,10 +64,13 @@ export default function StandardScreen({ expression, result, actions, history, o
 }
 
 const styles = StyleSheet.create({
-    historySection: {
+    top: {
         flex: 1,
+    },
+    historySection: {
+        maxHeight: 130,
         marginHorizontal: Spacing.xl,
-        marginBottom: 0,
+        marginBottom: 4,
         backgroundColor: Colors.surface,
         borderRadius: Radii.lg,
         borderWidth: 1,
@@ -107,5 +111,9 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingBottom: 2,
+    },
+    buttonArea: {
+        // Fixed height: 5 rows × 52px + 4 gaps × 5px + paddingTop 4 + paddingBottom 10
+        height: 294,
     },
 });

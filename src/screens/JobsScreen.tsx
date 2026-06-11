@@ -420,7 +420,25 @@ export default function JobsScreen() {
     // city extracted from profile location ("Chennai, Tamil Nadu" → "Chennai")
     const profileCity = userLocation.split(',')[0].trim();
 
-    const visibleJobs = allJobs
+    // Jobs that match at least one profile skill (title or tags)
+    const skillsLower = userSkills.map(s => s.toLowerCase());
+
+    function skillScore(job: UnifiedJob): number {
+        if (skillsLower.length === 0) return 0;
+        const titleLower = job.title.toLowerCase();
+        const tagScore = job.tags.filter(t => skillsLower.some(s => t.toLowerCase().includes(s))).length;
+        const titleScore = skillsLower.filter(s => titleLower.includes(s)).length;
+        return tagScore * 2 + titleScore;
+    }
+
+    const skillMatched = search.trim()
+        ? allJobs  // when searching, don't skill-filter
+        : allJobs.filter(j => skillsLower.length === 0 || skillScore(j) > 0);
+
+    const usingSkillFallback = skillsLower.length > 0 && skillMatched.length === 0;
+    const baseJobs = usingSkillFallback ? allJobs : skillMatched;
+
+    const visibleJobs = baseJobs
         .filter(job => {
             if (!matchesFilter(job, filter)) return false;
             if (search.trim()) {
@@ -435,17 +453,13 @@ export default function JobsScreen() {
             return true;
         })
         .sort((a, b) => {
-            // Primary: location relevance (profile city)
+            // 1. Location relevance for profile city
             const locDiff = locationScore(b, profileCity) - locationScore(a, profileCity);
             if (locDiff !== 0) return locDiff;
-            // Secondary: skill match count
-            const skillsLower = userSkills.map(s => s.toLowerCase());
-            const scoreA = a.tags.filter(t => skillsLower.some(s => t.toLowerCase().includes(s))).length
-                         + (a.title.split(' ').filter(w => skillsLower.some(s => w.toLowerCase().includes(s))).length);
-            const scoreB = b.tags.filter(t => skillsLower.some(s => t.toLowerCase().includes(s))).length
-                         + (b.title.split(' ').filter(w => skillsLower.some(s => w.toLowerCase().includes(s))).length);
-            if (scoreB !== scoreA) return scoreB - scoreA;
-            // Tertiary: newest first
+            // 2. Skill match score
+            const sDiff = skillScore(b) - skillScore(a);
+            if (sDiff !== 0) return sDiff;
+            // 3. Newest first
             return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
         });
 
@@ -474,6 +488,14 @@ export default function JobsScreen() {
                     </Text>
                 </View>
             ) : null}
+
+            {usingSkillFallback && (
+                <View style={styles.skillFallbackBanner}>
+                    <Text style={styles.skillFallbackText}>
+                        No exact skill matches — showing all jobs. Update skills in Profile tab.
+                    </Text>
+                </View>
+            )}
 
             {usedHN && sourcesLoaded === 0 && (
                 <View style={styles.hnBanner}>
@@ -669,6 +691,16 @@ const styles = StyleSheet.create({
         marginBottom: Spacing.lg,
     },
     hnBannerText: { color: '#FF6600', fontSize: FontSize.xs, lineHeight: 18 },
+
+    skillFallbackBanner: {
+        backgroundColor: 'rgba(245,158,11,0.12)',
+        borderRadius: Radii.md,
+        borderLeftWidth: 3,
+        borderLeftColor: '#F59E0B',
+        padding: Spacing.md,
+        marginBottom: Spacing.lg,
+    },
+    skillFallbackText: { color: '#F59E0B', fontSize: FontSize.xs, lineHeight: 18 },
 
     searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.input, borderWidth: 1, borderColor: Colors.inputBorder, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
     searchInput: { flex: 1, paddingVertical: Spacing.md, color: Colors.text.primary, fontSize: FontSize.body },

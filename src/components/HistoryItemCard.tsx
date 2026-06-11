@@ -9,58 +9,37 @@ type Props = {
     isLast: boolean;
 };
 
-export default function HistoryItemCard({ item, onSelect, isLast }: Props) {
-    const handlePress = () => {
-        try {
-            onSelect(item);
-        } catch {
-            // ignore navigation errors
-        }
-    };
-
+export default React.memo(function HistoryItemCard({ item, onSelect, isLast }: Props) {
     return (
         <TouchableOpacity
-            onPress={handlePress}
+            onPress={() => onSelect(item)}
             style={[styles.card, isLast && styles.lastCard]}
             activeOpacity={0.7}
         >
             <View style={styles.content}>
-                <Text
-                    style={styles.expression}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                >
+                <Text style={styles.expression} numberOfLines={1} ellipsizeMode="tail">
                     {item.expression}
                 </Text>
                 <View style={styles.badge}>
-                    <Text style={styles.result} numberOfLines={1}>
-                        {item.result}
-                    </Text>
+                    <Text style={styles.result} numberOfLines={1}>{item.result}</Text>
                 </View>
             </View>
         </TouchableOpacity>
     );
-}
+});
 
 const styles = StyleSheet.create({
     card: {
         backgroundColor: Colors.historyCard,
         borderRadius: Radii.lg,
         padding: 8,
-        marginBottom: 6,
+        marginBottom: 5,
         borderLeftWidth: 3,
         borderLeftColor: Colors.accent,
         borderWidth: 1,
         borderColor: Colors.surfaceBorder,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-        elevation: 3,
     },
-    lastCard: {
-        marginBottom: Spacing.xxl,
-    },
+    lastCard: { marginBottom: 2 },
     content: {
         flexDirection: 'row',
         justifyContent: 'space-between',

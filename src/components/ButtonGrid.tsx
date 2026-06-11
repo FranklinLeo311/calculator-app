@@ -18,31 +18,24 @@ type Props = {
 };
 
 function resolveHandler(btn: ButtonDef, actions: CalcActions): () => void {
-    try {
-        switch (btn.kind) {
-            case 'input':    return () => actions.input(btn.value ?? '');
-            case 'operator': return () => actions.inputOperator(btn.value ?? '');
-            case 'clearEntry': return actions.clearEntry;
-            case 'backspace':  return actions.backspace;
-            case 'toggleSign': return actions.toggleSign;
-            case 'evaluate':   return actions.evaluateExpression;
-            default:           return () => {};
-        }
-    } catch {
-        return () => {};
+    switch (btn.kind) {
+        case 'input':      return () => actions.input(btn.value ?? '');
+        case 'operator':   return () => actions.inputOperator(btn.value ?? '');
+        case 'clearEntry': return actions.clearEntry;
+        case 'backspace':  return actions.backspace;
+        case 'toggleSign': return actions.toggleSign;
+        case 'evaluate':   return actions.evaluateExpression;
+        default:           return () => {};
     }
 }
 
-export default function ButtonGrid({ layout, actions }: Props) {
+export default React.memo(function ButtonGrid({ layout, actions }: Props) {
     return (
         <View style={styles.container}>
             {layout.map((row, rowIndex) => (
                 <View key={rowIndex} style={styles.row}>
                     {row.map((btn, btnIndex) => (
-                        <View
-                            key={btnIndex}
-                            style={[styles.cell, { flex: btn.flex ?? 1 }]}
-                        >
+                        <View key={btnIndex} style={[styles.cell, { flex: btn.flex ?? 1 }]}>
                             <Button
                                 label={btn.label}
                                 variant={btn.variant}
@@ -54,19 +47,17 @@ export default function ButtonGrid({ layout, actions }: Props) {
             ))}
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
         paddingHorizontal: 8,
         paddingTop: 4,
         paddingBottom: 10,
         gap: 5,
     },
     row: {
-        flex: 1,
-        maxHeight: 50,
+        height: 52,
         flexDirection: 'row',
         gap: 5,
     },

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Spacing, Radii } from '../config/theme';
+import { storageGet } from '../utils/storage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,10 @@ export default function TechNewsScreen() {
         setError(null);
 
         try {
+            // Load profile skills for prioritization
+            const profile = await storageGet<{ skills?: string[] }>('user_profile_v1');
+            const skillsLower = (profile?.skills ?? []).map(s => s.toLowerCase());
+
             const idsRes = await fetch(TOP_STORIES_URL);
             if (!idsRes.ok) throw new Error('Failed to fetch story list');
             const ids: number[] = await idsRes.json();
@@ -133,6 +138,15 @@ export default function TechNewsScreen() {
             const fetched: HNStory[] = storyResults
                 .filter((r): r is PromiseFulfilledResult<HNStory> => r.status === 'fulfilled' && r.value != null)
                 .map(r => r.value);
+
+            // Skill-matched stories float to top
+            if (skillsLower.length > 0) {
+                fetched.sort((a, b) => {
+                    const scoreA = skillsLower.filter(s => a.title.toLowerCase().includes(s)).length;
+                    const scoreB = skillsLower.filter(s => b.title.toLowerCase().includes(s)).length;
+                    return scoreB - scoreA;
+                });
+            }
 
             setStories(fetched);
         } catch (e: unknown) {

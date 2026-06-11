@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { safeEvaluate } from '../utils/mathEngine';
 import { storageGet, storageSet } from '../utils/storage';
 
-const MAX_HISTORY = 200;
+const MAX_HISTORY = 50;
 
 export type HistoryItem = {
     id: string;
@@ -13,137 +13,98 @@ export type HistoryItem = {
 
 export default function useCalculator(storageKey = 'calc_history_v1') {
     const [expression, setExpression] = useState<string>('');
-    const [result, setResult] = useState<string>('0');
-    const [history, setHistory] = useState<HistoryItem[]>([]);
+    const [result, setResult]         = useState<string>('0');
+    const [history, setHistory]       = useState<HistoryItem[]>([]);
 
-    // Load persisted history on mount
+    // Load persisted history once on mount
     useEffect(() => {
         storageGet<HistoryItem[]>(storageKey).then(saved => {
             if (Array.isArray(saved)) setHistory(saved);
         });
-    }, []);
+    }, [storageKey]);
 
-    // Live-evaluate as user types; never throw into React render
+    // Live-evaluate as user types — synchronous, no await
     useEffect(() => {
+        if (!expression) { setResult('0'); return; }
         try {
             const { value } = safeEvaluate(expression);
             if (value) setResult(value);
-        } catch {
-            // silent — display keeps previous valid result
-        }
+        } catch {}
     }, [expression]);
 
-    const persistHistory = useCallback(async (items: HistoryItem[]) => {
-        setHistory(items);
-        await storageSet(storageKey, items);
-    }, []);
-
     const input = useCallback((value: string) => {
-        try {
-            if (!value) return;
-            setExpression(prev => {
-                // prevent consecutive decimal points in the same number segment
-                if (value === '.' && /\.$/.test(prev)) return prev;
-                return prev + value;
-            });
-        } catch {
-            // ignore
-        }
+        if (!value) return;
+        setExpression(prev => {
+            if (value === '.' && /\.$/.test(prev)) return prev;
+            return prev + value;
+        });
     }, []);
 
     const inputOperator = useCallback((op: string) => {
-        try {
-            if (!op) return;
-            setExpression(prev => {
-                if (!prev) return prev;
-                // replace trailing operator instead of stacking
-                if (/[+\-×÷/*^]$/.test(prev)) {
-                    return prev.slice(0, -1) + op;
-                }
-                return prev + op;
-            });
-        } catch {
-            // ignore
-        }
+        if (!op) return;
+        setExpression(prev => {
+            if (!prev) return prev;
+            if (/[+\-×÷/*^]$/.test(prev)) return prev.slice(0, -1) + op;
+            return prev + op;
+        });
     }, []);
 
     const clearEntry = useCallback(() => {
-        try {
-            setExpression('');
-            setResult('0');
-        } catch {
-            // ignore
-        }
+        setExpression('');
+        setResult('0');
     }, []);
 
     const backspace = useCallback(() => {
-        try {
-            setExpression(prev => (prev.length > 0 ? prev.slice(0, -1) : prev));
-        } catch {
-            // ignore
-        }
+        setExpression(prev => prev.length > 0 ? prev.slice(0, -1) : prev);
     }, []);
 
     const toggleSign = useCallback(() => {
-        try {
-            setExpression(prev => {
-                if (!prev) return prev;
-                const match = prev.match(/(.*?)([-]?\d+\.?\d*)$/);
-                if (!match) return prev;
-                const [, prefix, num] = match;
-                return num.startsWith('-')
-                    ? (prefix ?? '') + num.slice(1)
-                    : (prefix ?? '') + '-' + num;
-            });
-        } catch {
-            // ignore
-        }
+        setExpression(prev => {
+            if (!prev) return prev;
+            const match = prev.match(/(.*?)([-]?\d+\.?\d*)$/);
+            if (!match) return prev;
+            const [, prefix, num] = match;
+            return num.startsWith('-')
+                ? (prefix ?? '') + num.slice(1)
+                : (prefix ?? '') + '-' + num;
+        });
     }, []);
 
-    const evaluateExpression = useCallback(async (): Promise<string> => {
+    const evaluateExpression = useCallback(() => {
         try {
             const { value, error } = safeEvaluate(expression);
-
-            if (error || !value) {
-                setResult('Error');
-                return 'Error';
-            }
+            if (error || !value) { setResult('Error'); return; }
 
             const item: HistoryItem = {
-                id: `${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+                id: `${Date.now()}`,
                 expression,
                 result: value,
                 time: Date.now(),
             };
 
             const updated = [item, ...history].slice(0, MAX_HISTORY);
-            await persistHistory(updated);
 
+            // Update UI immediately — no await
+            setHistory(updated);
             setExpression(value);
             setResult(value);
-            return value;
+
+            // Persist in background — does not block UI
+            storageSet(storageKey, updated).catch(() => {});
         } catch {
             setResult('Error');
-            return 'Error';
         }
-    }, [expression, history, persistHistory]);
+    }, [expression, history, storageKey]);
 
     const loadFromHistory = useCallback((item: HistoryItem) => {
-        try {
-            setExpression(item.expression ?? '');
-            setResult(item.result ?? '0');
-        } catch {
-            // ignore
-        }
+        setExpression(item.expression ?? '');
+        setResult(item.result ?? '0');
     }, []);
 
-    const clearHistory = useCallback(async () => {
-        try {
-            await persistHistory([]);
-        } catch {
-            setHistory([]);
-        }
-    }, [persistHistory]);
+    const clearHistory = useCallback(() => {
+        setHistory([]);
+        storageSet(storageKey, []).catch(() => {});
+    }, [storageKey]);
 
     return {
         expression,

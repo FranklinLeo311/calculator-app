@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
-    ActivityIndicator,
     ScrollView,
     StyleSheet,
     Switch,
@@ -16,8 +15,6 @@ import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { storageGet, storageRemove, storageSet } from '../utils/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { pickAndParseResume } from '../utils/resumeParser';
-import type { ParsedResume } from '../utils/resumeParser';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,15 +63,8 @@ const STORAGE_KEY = 'app_settings_v1';
 export default function SettingsScreen() {
     const [settings, setSettings]     = useState<AppSettings>(DEFAULTS);
     const [savedAt,  setSavedAt]      = useState<number | null>(null);
-    const [resume,   setResume]       = useState<ParsedResume | null>(null);
-    const [parsing,  setParsing]      = useState(false);
     const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hideToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    // Load saved resume info on mount
-    useEffect(() => {
-        storageGet<ParsedResume>('user_resume_v1').then(r => { if (r) setResume(r); });
-    }, []);
 
     // Load on mount
     useEffect(() => {
@@ -165,55 +155,6 @@ export default function SettingsScreen() {
         storageRemove('metal_rates_cache_v1').then(() => setSavedAt(Date.now()));
     };
 
-    // ── Resume upload & auto-fill ─────────────────────────────────────────────
-    const uploadResume = async () => {
-        setParsing(true);
-        try {
-            const parsed = await pickAndParseResume();
-            if (!parsed) { setParsing(false); return; }
-
-            // Store the resume metadata (not the full base64 to save space)
-            const toSave: ParsedResume = { ...parsed };
-            await storageSet('user_resume_v1', toSave);
-            setResume(toSave);
-
-            // Auto-fill profile from resume — also save resume metadata so ProfileScreen can display it
-            const existingProfile = await storageGet<any>('user_profile_v1') ?? {};
-            const updatedProfile = {
-                ...existingProfile,
-                name:             parsed.name  ?? existingProfile.name  ?? '',
-                title:            parsed.title ?? existingProfile.title ?? '',
-                location:         existingProfile.location || 'Chennai, Tamil Nadu',
-                skills:           parsed.skills.length > 0 ? parsed.skills : (existingProfile.skills ?? []),
-                resumeFileName:   parsed.fileName,
-                resumeSizeKb:     parsed.sizeKb,
-                resumeBase64Uri:  parsed.base64Uri,
-            };
-            await storageSet('user_profile_v1', updatedProfile);
-            setSavedAt(Date.now());
-
-            Alert.alert(
-                '✅ Resume Imported',
-                `Detected ${parsed.skills.length} skill${parsed.skills.length !== 1 ? 's' : ''}${parsed.name ? ` · Name: ${parsed.name}` : ''}.\n\nProfile and Jobs have been updated. Go to the Profile tab to review.`,
-            );
-        } catch (err: any) {
-            Alert.alert('Error', err?.message ?? 'Could not parse resume.');
-        } finally {
-            setParsing(false);
-        }
-    };
-
-    const removeResume = () => {
-        Alert.alert('Remove Resume', 'Clear the uploaded resume?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Remove', style: 'destructive', onPress: async () => {
-                await storageRemove('user_resume_v1');
-                setResume(null);
-                setSavedAt(Date.now());
-            }},
-        ]);
-    };
-
     const exportData = async () => {
         try {
             const keys = [
@@ -283,61 +224,6 @@ export default function SettingsScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 <Text style={styles.pageTitle}>⚙️ Settings</Text>
-
-                {/* ── Resume ───────────────────────────────────────────── */}
-                <SectionHeader label="Resume" />
-                <View style={styles.resumeCard}>
-                    {resume ? (
-                        <View style={styles.resumeRow}>
-                            <View style={styles.resumeIcon}>
-                                <Text style={{ fontSize: 28 }}>📄</Text>
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.resumeName} numberOfLines={1}>{resume.fileName}</Text>
-                                <Text style={styles.resumeMeta}>
-                                    {resume.sizeKb} KB · {resume.skills.length} skills detected
-                                    {resume.name ? ` · ${resume.name}` : ''}
-                                </Text>
-                            </View>
-                            <TouchableOpacity onPress={removeResume} style={styles.resumeRemoveBtn}>
-                                <Text style={styles.resumeRemoveText}>✕</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <Text style={styles.resumeEmpty}>
-                            No resume uploaded. Upload to auto-fill your profile and job filters.
-                        </Text>
-                    )}
-
-                    <TouchableOpacity
-                        style={[styles.resumeUploadBtn, parsing && { opacity: 0.6 }]}
-                        onPress={uploadResume}
-                        disabled={parsing}
-                        activeOpacity={0.8}
-                    >
-                        {parsing
-                            ? <ActivityIndicator size="small" color="#fff" />
-                            : <Text style={styles.resumeUploadText}>
-                                {resume ? '🔄 Re-upload Resume' : '📤 Upload Resume (PDF / DOC)'}
-                              </Text>
-                        }
-                    </TouchableOpacity>
-
-                    {resume && resume.skills.length > 0 && (
-                        <View style={styles.detectedSkillsRow}>
-                            {resume.skills.slice(0, 8).map(s => (
-                                <View key={s} style={styles.detectedSkillChip}>
-                                    <Text style={styles.detectedSkillText}>{s}</Text>
-                                </View>
-                            ))}
-                            {resume.skills.length > 8 && (
-                                <View style={styles.detectedSkillChip}>
-                                    <Text style={styles.detectedSkillText}>+{resume.skills.length - 8} more</Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-                </View>
 
                 {/* ── Calculator ────────────────────────────────────────── */}
                 <SectionHeader label="Calculator" />

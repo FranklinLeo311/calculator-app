@@ -32,6 +32,23 @@ const DATA: Record<string, number> = {
     B: 1, KB: 1024, MB: 1048576, GB: 1073741824, TB: 1099511627776,
 };
 
+// Electrical — base units: V, A, Ω, W, J
+const VOLTAGE: Record<string, number> = {
+    V: 1, mV: 0.001, kV: 1000, MV: 1e6,
+};
+const CURRENT: Record<string, number> = {
+    A: 1, mA: 0.001, μA: 1e-6, kA: 1000,
+};
+const RESISTANCE: Record<string, number> = {
+    'Ω': 1, 'kΩ': 1000, 'MΩ': 1e6, 'GΩ': 1e9,
+};
+const POWER: Record<string, number> = {
+    W: 1, mW: 0.001, kW: 1000, MW: 1e6, HP: 745.7,
+};
+const ENERGY: Record<string, number> = {
+    J: 1, kJ: 1000, MJ: 1e6, Wh: 3600, kWh: 3.6e6, MWh: 3.6e9, cal: 4.184, kcal: 4184,
+};
+
 type Category = {
     key: string;
     label: string;
@@ -42,13 +59,18 @@ type Category = {
 };
 
 const CATEGORIES: Category[] = [
-    { key: 'length',  label: 'Length',  emoji: '📏', color: Colors.chart.blue,   units: LENGTH, unitList: Object.keys(LENGTH) },
-    { key: 'weight',  label: 'Weight',  emoji: '⚖️', color: Colors.chart.amber,  units: WEIGHT, unitList: Object.keys(WEIGHT) },
-    { key: 'temp',    label: 'Temp',    emoji: '🌡',  color: Colors.chart.red,    units: null,   unitList: ['°C', '°F', 'K'] },
-    { key: 'speed',   label: 'Speed',   emoji: '🚀', color: Colors.chart.purple, units: SPEED,  unitList: Object.keys(SPEED) },
-    { key: 'area',    label: 'Area',    emoji: '📐', color: Colors.chart.cyan,   units: AREA,   unitList: Object.keys(AREA) },
-    { key: 'volume',  label: 'Volume',  emoji: '💧', color: Colors.chart.green,  units: VOLUME, unitList: Object.keys(VOLUME) },
-    { key: 'data',    label: 'Data',    emoji: '💾', color: Colors.chart.pink,   units: DATA,   unitList: Object.keys(DATA) },
+    { key: 'length',     label: 'Length',      emoji: '📏', color: Colors.chart.blue,   units: LENGTH,     unitList: Object.keys(LENGTH) },
+    { key: 'weight',     label: 'Weight',      emoji: '⚖️', color: Colors.chart.amber,  units: WEIGHT,     unitList: Object.keys(WEIGHT) },
+    { key: 'temp',       label: 'Temp',        emoji: '🌡',  color: Colors.chart.red,    units: null,       unitList: ['°C', '°F', 'K'] },
+    { key: 'speed',      label: 'Speed',       emoji: '🚀', color: Colors.chart.purple, units: SPEED,      unitList: Object.keys(SPEED) },
+    { key: 'area',       label: 'Area',        emoji: '📐', color: Colors.chart.cyan,   units: AREA,       unitList: Object.keys(AREA) },
+    { key: 'volume',     label: 'Volume',      emoji: '💧', color: Colors.chart.green,  units: VOLUME,     unitList: Object.keys(VOLUME) },
+    { key: 'data',       label: 'Data',        emoji: '💾', color: Colors.chart.pink,   units: DATA,       unitList: Object.keys(DATA) },
+    { key: 'voltage',    label: 'Voltage',     emoji: '⚡', color: '#FBBF24',           units: VOLTAGE,    unitList: Object.keys(VOLTAGE) },
+    { key: 'current',    label: 'Current',     emoji: '🔌', color: '#60A5FA',           units: CURRENT,    unitList: Object.keys(CURRENT) },
+    { key: 'resistance', label: 'Resistance',  emoji: '🔧', color: '#A78BFA',           units: RESISTANCE, unitList: Object.keys(RESISTANCE) },
+    { key: 'power',      label: 'Power',       emoji: '💡', color: '#34D399',           units: POWER,      unitList: Object.keys(POWER) },
+    { key: 'energy',     label: 'Energy',      emoji: '🔋', color: '#F87171',           units: ENERGY,     unitList: Object.keys(ENERGY) },
 ];
 
 // ─── Temperature helpers ─────────────────────────────────────────────────────
