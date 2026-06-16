@@ -15,6 +15,7 @@ import PasswordManagerScreen from './src/screens/PasswordManagerScreen';
 import DocumentManagerScreen from './src/screens/DocumentManagerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import JobsScreen from './src/screens/JobsScreen';
+import EventsScreen from './src/screens/EventsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { Colors, FontSize } from './src/config/theme';
 
@@ -34,6 +35,7 @@ const ROUTES = [
     { key: 'documents', title: '📁 Docs'      },
     { key: 'profile',   title: '👤 Profile'   },
     { key: 'jobs',      title: '💼 Jobs'      },
+    { key: 'events',    title: '📅 Events'    },
     { key: 'settings',  title: '⚙️ Settings'  },
 ] as const;
 
@@ -131,6 +133,12 @@ export default function App() {
                         return (
                             <ErrorBoundary>
                                 <JobsScreen />
+                            </ErrorBoundary>
+                        );
+                    case 'events':
+                        return (
+                            <ErrorBoundary>
+                                <EventsScreen />
                             </ErrorBoundary>
                         );
                     case 'settings':

@@ -17,6 +17,14 @@
     },
     "plugins": [
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#10b981",
+          "sounds": []
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow My Maths to access your photos to upload documents.",
@@ -26,18 +34,19 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "934d18af-9c07-4c86-843e-e61426394541"
+        "projectId": "0aa1b3cb-8cc7-4a0e-aff7-dcd2f9ac6227"
       }
     },
     "android": {
       "package": "franklinleo.calculator",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
-    "owner": "franklinantony311",
+    "owner": "franklinleo311",
     "ios": {
       "bundleIdentifier": "franklinleo.calculator",
       "infoPlist": {

@@ -37,6 +37,11 @@ type AppSettings = {
     hideSalarylesJobs: boolean;
     // Notifications
     jobsNotifyEnabled: boolean;
+    // Events
+    eventNotifyHour: number;
+    eventNotifyMinute: number;
+    eventNotifyDaysBefore: number;
+    cloudSyncUrl: string;
 };
 
 const DEFAULTS: AppSettings = {
@@ -54,6 +59,10 @@ const DEFAULTS: AppSettings = {
     jobAlertKeywords: 'React, Node.js',
     hideSalarylesJobs: false,
     jobsNotifyEnabled: false,
+    eventNotifyHour: 8,
+    eventNotifyMinute: 0,
+    eventNotifyDaysBefore: 3,
+    cloudSyncUrl: '',
 };
 
 const STORAGE_KEY = 'app_settings_v1';
@@ -400,6 +409,51 @@ export default function SettingsScreen() {
                             thumbColor={settings.hideSalarylesJobs ? Colors.accent : Colors.text.muted}
                         />
                     </SettingRow>
+                </View>
+
+                {/* ── Events & Reminders ───────────────────────────────── */}
+                <SectionHeader label="Events & Reminders" />
+                <View style={styles.card}>
+                    <View style={styles.chipSettingRow}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.rowLabel}>Daily Notification Time</Text>
+                            <Text style={styles.helperText}>When to get your morning event reminder</Text>
+                        </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: Spacing.sm }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.helperText, { marginBottom: 4 }]}>Hour (0–23)</Text>
+                            {stepper('eventNotifyHour', settings.eventNotifyHour, 0, 23, 1)}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.helperText, { marginBottom: 4 }]}>Minute</Text>
+                            {stepper('eventNotifyMinute', settings.eventNotifyMinute, 0, 55, 5)}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.helperText, { marginBottom: 4 }]}>Days ahead</Text>
+                            {stepper('eventNotifyDaysBefore', settings.eventNotifyDaysBefore, 0, 14, 1)}
+                        </View>
+                    </View>
+                    <Divider />
+                    <View style={styles.chipSettingRow}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.rowLabel}>☁️ Cloud Sync URL</Text>
+                            <Text style={styles.helperText}>Firebase Realtime DB URL for event backup</Text>
+                        </View>
+                    </View>
+                    <TextInput
+                        style={[styles.inlineInput, { marginTop: Spacing.sm, flex: 0, width: '100%', fontSize: 12 }]}
+                        value={settings.cloudSyncUrl}
+                        onChangeText={v => updateDebounced('cloudSyncUrl', v.trim())}
+                        placeholder="https://your-app.firebaseio.com"
+                        placeholderTextColor={Colors.text.muted}
+                        autoCapitalize="none"
+                        keyboardType="url"
+                        returnKeyType="done"
+                    />
+                    <Text style={[styles.helperText, { marginTop: 6, lineHeight: 16 }]}>
+                        Setup: firebase.google.com → New project → Realtime Database (test mode) → copy URL
+                    </Text>
                 </View>
 
                 {/* ── Data Management ──────────────────────────────────── */}
