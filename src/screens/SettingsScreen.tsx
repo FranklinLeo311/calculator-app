@@ -69,7 +69,7 @@ const STORAGE_KEY = 'app_settings_v1';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }) {
     const [settings, setSettings]     = useState<AppSettings>(DEFAULTS);
     const [savedAt,  setSavedAt]      = useState<number | null>(null);
     const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -515,6 +515,25 @@ export default function SettingsScreen() {
                     <Divider />
                     <AboutRow label="Jobs powered by" value="Remotive.com" />
                 </View>
+
+                {/* ── Account ──────────────────────────────────────────── */}
+                {onSignOut && (
+                    <>
+                        <SectionHeader label="Account" />
+                        <TouchableOpacity
+                            style={[styles.dangerBtn, { backgroundColor: '#1e293b', borderWidth: 1, borderColor: Colors.error }]}
+                            onPress={() =>
+                                Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: 'Sign Out', style: 'destructive', onPress: onSignOut },
+                                ])
+                            }
+                            activeOpacity={0.8}
+                        >
+                            <Text style={[styles.dangerBtnText, { color: Colors.error }]}>Sign Out</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>

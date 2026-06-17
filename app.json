@@ -9,6 +9,7 @@
       "android",
       "web"
     ],
+    "scheme": "mymaths",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
