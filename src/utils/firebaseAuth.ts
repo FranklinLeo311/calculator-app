@@ -3,7 +3,7 @@
  * Supports: Email Magic Link (passwordless), Google OAuth, Phone whitelist.
  */
 
-import * as SecureStore from 'expo-secure-store';
+import { secureStorage } from './secureStorage';
 import { FIREBASE_DB_URL, FIREBASE_API_KEY_STORAGE } from '../config/firebase';
 
 export type FirebaseUser = {
@@ -23,12 +23,12 @@ const TOKEN_BASE = 'https://securetoken.googleapis.com/v1/token';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export async function getApiKey(): Promise<string> {
-    const key = await SecureStore.getItemAsync(FIREBASE_API_KEY_STORAGE);
+    const key = await secureStorage.getItem(FIREBASE_API_KEY_STORAGE);
     return key ?? '';
 }
 
 export async function setApiKey(key: string): Promise<void> {
-    await SecureStore.setItemAsync(FIREBASE_API_KEY_STORAGE, key.trim());
+    await secureStorage.setItem(FIREBASE_API_KEY_STORAGE, key.trim());
 }
 
 async function authPost(endpoint: string, body: object): Promise<any> {

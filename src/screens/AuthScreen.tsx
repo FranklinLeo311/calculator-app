@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import * as SecureStore from 'expo-secure-store';
+import { secureStorage } from '../utils/secureStorage';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -42,7 +42,7 @@ export default function AuthScreen() {
     // Google auth (needs client ID configured by admin)
     const [googleClientId, setGoogleClientId] = React.useState('');
     React.useEffect(() => {
-        SecureStore.getItemAsync(FIREBASE_GOOGLE_CLIENT_ID_STORAGE).then(id => {
+        secureStorage.getItem(FIREBASE_GOOGLE_CLIENT_ID_STORAGE).then(id => {
             if (id) setGoogleClientId(id);
         });
     }, []);

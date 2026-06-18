@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { secureStorage } from '../utils/secureStorage';
 import {
     type FirebaseUser,
     saveUserToDb,
@@ -28,23 +28,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Restore session on app start
     useEffect(() => {
         (async () => {
             try {
-                const raw = await SecureStore.getItemAsync(USER_STORE_KEY);
+                const raw = await secureStorage.getItem(USER_STORE_KEY);
                 if (raw) {
                     const saved: FirebaseUser = JSON.parse(raw);
-                    // Refresh token if we have one
                     if (saved.refreshToken) {
                         try {
                             const { idToken, refreshToken } = await refreshIdToken(saved.refreshToken);
                             saved.idToken = idToken;
                             saved.refreshToken = refreshToken;
-                            await SecureStore.setItemAsync(USER_STORE_KEY, JSON.stringify(saved));
-                        } catch {
-                            // Token refresh failed — still restore user for offline use
-                        }
+                            await secureStorage.setItem(USER_STORE_KEY, JSON.stringify(saved));
+                        } catch {}
                     }
                     setUser(saved);
                 }
@@ -55,14 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signIn = useCallback(async (newUser: FirebaseUser) => {
         setUser(newUser);
-        await SecureStore.setItemAsync(USER_STORE_KEY, JSON.stringify(newUser));
-        // Save to Firebase DB (fire and forget)
+        await secureStorage.setItem(USER_STORE_KEY, JSON.stringify(newUser));
         saveUserToDb(newUser).catch(() => {});
     }, []);
 
     const signOut = useCallback(async () => {
         setUser(null);
-        await SecureStore.deleteItemAsync(USER_STORE_KEY);
+        await secureStorage.deleteItem(USER_STORE_KEY);
     }, []);
 
     return (

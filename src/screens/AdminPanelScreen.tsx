@@ -3,7 +3,7 @@ import {
     ActivityIndicator, Alert, ScrollView, StyleSheet,
     Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { secureStorage } from '../utils/secureStorage';
 import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { FIREBASE_API_KEY_STORAGE, FIREBASE_GOOGLE_CLIENT_ID_STORAGE, FIREBASE_DB_URL } from '../config/firebase';
@@ -30,7 +30,7 @@ export default function AdminPanelScreen() {
         setLoading(true);
         const [key, gId, config] = await Promise.all([
             getApiKey(),
-            SecureStore.getItemAsync(FIREBASE_GOOGLE_CLIENT_ID_STORAGE),
+            secureStorage.getItem(FIREBASE_GOOGLE_CLIENT_ID_STORAGE),
             getAdminConfig(),
         ]);
         setApiKeyState(key ?? '');
@@ -46,7 +46,7 @@ export default function AdminPanelScreen() {
         setSaving(true);
         await setApiKey(apiKey.trim());
         if (googleClientId.trim()) {
-            await SecureStore.setItemAsync(FIREBASE_GOOGLE_CLIENT_ID_STORAGE, googleClientId.trim());
+            await secureStorage.setItem(FIREBASE_GOOGLE_CLIENT_ID_STORAGE, googleClientId.trim());
         }
         setSaving(false);
         setSaved(true);
