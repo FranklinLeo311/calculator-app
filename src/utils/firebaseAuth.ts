@@ -1,10 +1,11 @@
 /**
  * Firebase Auth REST API — no SDK needed.
- * Supports: Email Magic Link (passwordless), Google OAuth, Phone whitelist.
+ * Supports: Email Magic Link, Google OAuth, Phone/Email OTP registration.
+ * Default admins (ADMIN_EMAIL, ADMIN_PHONE) always bypass Firebase requirements.
  */
 
 import { secureStorage } from './secureStorage';
-import { FIREBASE_DB_URL, FIREBASE_API_KEY_STORAGE } from '../config/firebase';
+import { FIREBASE_DB_URL, FIREBASE_API_KEY_STORAGE, ADMIN_EMAIL, ADMIN_PHONE } from '../config/firebase';
 
 export type FirebaseUser = {
     uid: string;
@@ -19,6 +20,9 @@ export type FirebaseUser = {
 
 const AUTH_BASE = 'https://identitytoolkit.googleapis.com/v1/accounts';
 const TOKEN_BASE = 'https://securetoken.googleapis.com/v1/token';
+
+// In-memory OTP cache used ONLY for default admins (no Firebase needed)
+const adminOtpCache: Record<string, { code: string; expiry: number }> = {};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +48,179 @@ async function authPost(endpoint: string, body: object): Promise<any> {
     return data;
 }
 
-// ── Email Magic Link (passwordless) ───────────────────────────────────────────
+function randomCode(): string {
+    return String(Math.floor(100000 + Math.random() * 899999));
+}
+
+function sanitizeKey(s: string): string {
+    return s.replace(/[.#$/\[\]@:]/g, '_');
+}
+
+export function determineRole(email?: string, phone?: string): 'admin' | 'user' {
+    if (email === ADMIN_EMAIL || phone === ADMIN_PHONE) return 'admin';
+    return 'user';
+}
+
+function isDefaultAdmin(key: string): boolean {
+    const phone = key.startsWith('phone:') ? key.slice(6) : undefined;
+    const email = key.startsWith('email:') ? key.slice(6) : undefined;
+    return phone === ADMIN_PHONE || email === ADMIN_EMAIL;
+}
+
+// ── OTP: Generate & Store ─────────────────────────────────────────────────────
+
+/**
+ * Generate a 6-digit OTP and store it (Firebase for users, memory for default admin).
+ * Returns the generated code to display in the UI (SMS not yet wired up).
+ *
+ * @param key  e.g. "phone:9876543210" or "email:user@example.com"
+ */
+export async function generateAndStoreOtp(key: string): Promise<string> {
+    const code = randomCode();
+    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    if (isDefaultAdmin(key)) {
+        // Default admin never needs Firebase — store in memory
+        adminOtpCache[key] = { code, expiry };
+        return code;
+    }
+
+    // Regular user — store in Firebase Realtime DB
+    const apiKey = await getApiKey();
+    if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
+
+    await fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, expiry }),
+    });
+    return code;
+}
+
+// ── OTP: Verify ───────────────────────────────────────────────────────────────
+
+/**
+ * Verify OTP. If valid, create/return a Firebase user.
+ * Throws 'OTP_INVALID' or 'OTP_EXPIRED' on failure.
+ */
+export async function verifyOtp(
+    key: string,
+    enteredCode: string,
+    email?: string,
+    phone?: string,
+): Promise<FirebaseUser> {
+    // Default admin — check memory cache
+    if (isDefaultAdmin(key)) {
+        const cached = adminOtpCache[key];
+        if (!cached) throw new Error('OTP_INVALID');
+        if (Date.now() > cached.expiry) { delete adminOtpCache[key]; throw new Error('OTP_EXPIRED'); }
+        if (cached.code !== enteredCode.trim()) throw new Error('OTP_INVALID');
+        delete adminOtpCache[key];
+
+        // Build a stable admin user (no Firebase needed)
+        const uid = phone ? `admin_phone_${phone}` : `admin_email_${sanitizeKey(email ?? '')}`;
+        const user: FirebaseUser = {
+            uid,
+            email: email,
+            phone: phone,
+            idToken: '',
+            refreshToken: '',
+            role: 'admin',
+        };
+        // Persist to Firebase in background (won't fail if no API key)
+        trySaveAdminToDb(user);
+        return user;
+    }
+
+    // Regular user — verify from Firebase DB
+    const res = await fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`);
+    if (!res.ok) throw new Error('OTP_INVALID');
+    const stored: { code: string; expiry: number } | null = await res.json();
+    if (!stored) throw new Error('OTP_INVALID');
+    if (Date.now() > stored.expiry) {
+        // Clean up expired OTP
+        fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, { method: 'DELETE' }).catch(() => {});
+        throw new Error('OTP_EXPIRED');
+    }
+    if (stored.code !== enteredCode.trim()) throw new Error('OTP_INVALID');
+
+    // Delete OTP record (one-time use)
+    fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, { method: 'DELETE' }).catch(() => {});
+
+    // Get or create Firebase anonymous user for this identity
+    return getOrCreateIdentityUser(email, phone);
+}
+
+// ── Get or Create User ────────────────────────────────────────────────────────
+
+async function getOrCreateIdentityUser(email?: string, phone?: string): Promise<FirebaseUser> {
+    const indexKey = phone
+        ? `${FIREBASE_DB_URL}/phoneIndex/${sanitizeKey(phone!)}.json`
+        : `${FIREBASE_DB_URL}/emailIndex/${sanitizeKey(email!)}.json`;
+
+    // Look up existing UID
+    const uidRes = await fetch(indexKey);
+    const existingUid: string | null = uidRes.ok ? await uidRes.json() : null;
+
+    if (existingUid) {
+        // Known user — fetch their stored role
+        const metaRes = await fetch(`${FIREBASE_DB_URL}/users/${existingUid}/meta.json`);
+        const meta: any = metaRes.ok ? await metaRes.json() : null;
+        return {
+            uid: existingUid,
+            email,
+            phone,
+            displayName: meta?.displayName ?? undefined,
+            idToken: '',
+            refreshToken: '',
+            role: meta?.role ?? determineRole(email, phone),
+        };
+    }
+
+    // New user — create anonymous Firebase account
+    const data = await authPost('signUp', { returnSecureToken: true });
+    const uid: string = data.localId;
+
+    // Save index
+    await fetch(indexKey, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(uid),
+    });
+
+    const user: FirebaseUser = {
+        uid,
+        email,
+        phone,
+        idToken: data.idToken,
+        refreshToken: data.refreshToken,
+        role: determineRole(email, phone),
+    };
+
+    // Save profile
+    saveUserToDb(user).catch(() => {});
+    return user;
+}
+
+export async function getOrCreatePhoneUser(phone: string): Promise<FirebaseUser> {
+    return getOrCreateIdentityUser(undefined, phone);
+}
+
+// ── Google OAuth ───────────────────────────────────────────────────────────────
+
+export async function signInWithGoogle(idToken: string): Promise<FirebaseUser> {
+    const data = await authPost('signInWithIdp', {
+        postBody: `id_token=${idToken}&providerId=google.com`,
+        requestUri: 'http://localhost',
+        returnIdpCredential: true,
+        returnSecureToken: true,
+    });
+    const user = buildUser(data);
+    saveUserToDb(user).catch(() => {});
+    return user;
+}
+
+// ── Email Magic Link (fallback, if user clicks link) ─────────────────────────
 
 export async function sendMagicLink(email: string, continueUrl: string): Promise<void> {
     await authPost('sendOobCode', {
@@ -60,66 +236,12 @@ export async function signInWithEmailLink(email: string, oobCode: string): Promi
     return buildUser(data);
 }
 
-// ── Google OAuth ───────────────────────────────────────────────────────────────
-
-export async function signInWithGoogle(idToken: string): Promise<FirebaseUser> {
-    const data = await authPost('signInWithIdp', {
-        postBody: `id_token=${idToken}&providerId=google.com`,
-        requestUri: 'http://localhost',
-        returnIdpCredential: true,
-        returnSecureToken: true,
-    });
-    return buildUser(data);
-}
-
-// ── Phone whitelist login ─────────────────────────────────────────────────────
-
-export async function signInWithPhone(phone: string): Promise<FirebaseUser | null> {
-    // Check admin whitelist in Firebase DB
-    const res = await fetch(`${FIREBASE_DB_URL}/adminConfig/allowedPhones.json`);
-    if (!res.ok) return null;
-    const phones: string[] | null = await res.json();
-    if (!Array.isArray(phones) || !phones.includes(phone)) return null;
-
-    // Look up existing UID for this phone
-    const uidRes = await fetch(`${FIREBASE_DB_URL}/phoneIndex/${sanitizeKey(phone)}.json`);
-    let uid: string | null = uidRes.ok ? await uidRes.json() : null;
-
-    if (!uid) {
-        // First time — create anonymous account and tag with phone
-        const apiKey = await getApiKey();
-        if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
-        const anonRes = await fetch(`${AUTH_BASE}:signUp?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ returnSecureToken: true }),
-        });
-        const anonData = await anonRes.json();
-        if (!anonRes.ok) throw new Error(anonData?.error?.message);
-        uid = anonData.localId;
-        // Save phone → uid mapping
-        await fetch(`${FIREBASE_DB_URL}/phoneIndex/${sanitizeKey(phone)}.json`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(uid),
-        });
-        return buildPhoneUser(anonData, phone);
-    }
-
-    // Return a lightweight session object for known phone user
-    return {
-        uid,
-        phone,
-        idToken: '',
-        refreshToken: '',
-        role: determineRole(undefined, phone),
-    };
-}
-
 // ── Token refresh ─────────────────────────────────────────────────────────────
 
 export async function refreshIdToken(refreshToken: string): Promise<{ idToken: string; refreshToken: string }> {
+    if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
     const apiKey = await getApiKey();
+    if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
     const res = await fetch(`${TOKEN_BASE}?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,6 +269,10 @@ export async function saveUserToDb(user: FirebaseUser): Promise<void> {
     });
 }
 
+async function trySaveAdminToDb(user: FirebaseUser): Promise<void> {
+    try { await saveUserToDb(user); } catch {}
+}
+
 export async function getUserFromDb(uid: string): Promise<Partial<FirebaseUser> | null> {
     const res = await fetch(`${FIREBASE_DB_URL}/users/${uid}/meta.json`);
     if (!res.ok) return null;
@@ -168,6 +294,34 @@ export async function writeUserData(uid: string, path: string, data: unknown): P
     return res.ok;
 }
 
+// ── User management (admin) ───────────────────────────────────────────────────
+
+export async function listUsers(): Promise<Array<{ uid: string } & Partial<FirebaseUser>>> {
+    try {
+        const res = await fetch(`${FIREBASE_DB_URL}/users.json`);
+        if (!res.ok) return [];
+        const users: Record<string, any> | null = await res.json();
+        if (!users) return [];
+        return Object.entries(users).map(([uid, meta]) => ({ uid, ...meta?.meta }));
+    } catch { return []; }
+}
+
+export async function promoteToAdmin(uid: string): Promise<void> {
+    await fetch(`${FIREBASE_DB_URL}/users/${uid}/meta/role.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify('admin'),
+    });
+}
+
+export async function revokeAdmin(uid: string): Promise<void> {
+    await fetch(`${FIREBASE_DB_URL}/users/${uid}/meta/role.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify('user'),
+    });
+}
+
 // ── Admin config ──────────────────────────────────────────────────────────────
 
 export async function getAdminConfig(): Promise<Record<string, any>> {
@@ -180,23 +334,13 @@ export async function getAdminConfig(): Promise<Record<string, any>> {
 
 export async function saveAdminConfig(config: Record<string, any>): Promise<void> {
     await fetch(`${FIREBASE_DB_URL}/adminConfig.json`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
     });
 }
 
-// ── Internals ─────────────────────────────────────────────────────────────────
-
-function sanitizeKey(s: string): string {
-    return s.replace(/[.#$/\[\]]/g, '_');
-}
-
-export function determineRole(email?: string, phone?: string): 'admin' | 'user' {
-    const { ADMIN_EMAIL, ADMIN_PHONE } = require('../config/firebase');
-    if (email === ADMIN_EMAIL || phone === ADMIN_PHONE) return 'admin';
-    return 'user';
-}
+// ── Private builders ──────────────────────────────────────────────────────────
 
 function buildUser(data: any): FirebaseUser {
     return {
@@ -207,15 +351,5 @@ function buildUser(data: any): FirebaseUser {
         idToken: data.idToken,
         refreshToken: data.refreshToken,
         role: determineRole(data.email),
-    };
-}
-
-function buildPhoneUser(data: any, phone: string): FirebaseUser {
-    return {
-        uid: data.localId,
-        phone,
-        idToken: data.idToken,
-        refreshToken: data.refreshToken,
-        role: determineRole(undefined, phone),
     };
 }

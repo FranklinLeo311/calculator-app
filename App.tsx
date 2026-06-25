@@ -23,16 +23,16 @@ const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
 
 const USER_ROUTES = [
     { key: 'standard',  title: 'Standard'   },
-    { key: 'metals',    title: 'Metals'     },
+    { key: 'events',    title: '📅 Events'   },
     { key: 'tools',     title: 'Tools'      },
-    { key: 'currency',  title: '🌍 Currency' },
-    { key: 'units',     title: '📐 Units'    },
-    { key: 'news',      title: '📰 Tech'     },
     { key: 'passwords', title: '🔐 Vault'    },
     { key: 'documents', title: '📁 Docs'     },
+    { key: 'units',     title: '📐 Units'    },
+    { key: 'metals',    title: 'Metals'     },
+    { key: 'currency',  title: '🌍 Currency' },
+    { key: 'news',      title: '📰 Tech'     },
     { key: 'profile',   title: '👤 Profile'  },
     { key: 'jobs',      title: '💼 Jobs'     },
-    { key: 'events',    title: '📅 Events'   },
     { key: 'settings',  title: '⚙️ Settings' },
 ] as const;
 
@@ -120,7 +120,7 @@ function Root() {
 
 export default function App() {
     return (
-        <ErrorBoundary fallbackMessage="An unexpected error occurred. Please restart the app.">
+        <ErrorBoundary>
             <AuthProvider>
                 <Root />
             </AuthProvider>

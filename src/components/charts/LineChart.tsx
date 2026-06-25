@@ -13,6 +13,15 @@ type Props = {
 
 type Point = { x: number; y: number; label: string; value: number; index: number };
 
+const Y_AXIS_W = 52;
+
+function fmtY(n: number): string {
+    if (n >= 10000000) return (n / 10000000).toFixed(1) + 'Cr';
+    if (n >= 100000)   return (n / 100000).toFixed(1) + 'L';
+    if (n >= 1000)     return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'K';
+    return n < 10 ? n.toFixed(1) : Math.round(n).toString();
+}
+
 export default function LineChart({
     data,
     color = Colors.chart.green,
@@ -65,93 +74,111 @@ export default function LineChart({
         return { cx: (p.x + next.x) / 2, cy: (p.y + next.y) / 2, length, angle };
     });
 
-    const gridLines = [0.25, 0.5, 0.75].map(f => ({
-        y: PAD_V + f * drawH,
+    // Y-axis tick marks at 0%, 25%, 50%, 75%, 100% of drawH
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({
+        y:     PAD_V + f * drawH,
         value: maxVal - f * range,
     }));
 
-    const HIT = 20; // pressable hit area radius
+    const HIT = 20;
 
     return (
-        <View style={{ height }}>
-            <View
-                style={{ height: chartH }}
-                onLayout={e => setContainerWidth(e.nativeEvent.layout.width)}
-            >
-                {containerWidth > 0 && (
-                    <View style={StyleSheet.absoluteFill}>
-                        {/* grid lines */}
-                        {gridLines.map((g, i) => (
-                            <View key={i} style={[styles.gridLine, { top: g.y }]} />
-                        ))}
+        <View style={{ height, flexDirection: 'row' }}>
 
-                        {/* line segments */}
-                        {segments.map((seg, i) => (
-                            <View
-                                key={i}
-                                style={{
-                                    position: 'absolute',
-                                    width: seg.length,
-                                    height: 2,
-                                    backgroundColor: color,
-                                    left: seg.cx - seg.length / 2,
-                                    top: seg.cy - 1,
-                                    transform: [{ rotate: `${seg.angle}deg` }],
-                                    borderRadius: 1,
-                                    opacity: 0.75,
-                                }}
-                            />
-                        ))}
-
-                        {/* data point dots — pressable with hit slop */}
-                        {points.map((p, i) => {
-                            const selected = selectedIndex === i;
-                            const DOT = selected ? 12 : 8;
-                            return (
-                                <Pressable
-                                    key={i}
-                                    onPress={() => onPointPress?.(data[i], i)}
-                                    hitSlop={{ top: HIT, bottom: HIT, left: HIT, right: HIT }}
-                                    style={{
-                                        position: 'absolute',
-                                        left: p.x - DOT / 2,
-                                        top: p.y - DOT / 2,
-                                    }}
-                                >
-                                    <View
-                                        style={{
-                                            width: DOT,
-                                            height: DOT,
-                                            borderRadius: DOT / 2,
-                                            backgroundColor: selected ? Colors.text.white : color,
-                                            borderWidth: selected ? 3 : 2,
-                                            borderColor: selected ? color : Colors.background,
-                                        }}
-                                    />
-                                </Pressable>
-                            );
-                        })}
-                    </View>
-                )}
+            {/* Y-axis column */}
+            <View style={{ width: Y_AXIS_W, height: chartH, position: 'relative' }}>
+                {yTicks.map((t, i) => (
+                    <Text
+                        key={i}
+                        style={[styles.yAxisLabel, { top: t.y - 8 }]}
+                        numberOfLines={1}
+                    >
+                        {fmtY(t.value)}
+                    </Text>
+                ))}
             </View>
 
-            {/* x-axis labels — first, middle, last */}
-            <View style={styles.labelsRow}>
-                {data.length > 0 && (
-                    <>
-                        <Text style={styles.axisLabel}>{data[0].label}</Text>
-                        {data.length > 2 && (
-                            <Text style={[styles.axisLabel, styles.axisCenter]}>
-                                {data[Math.floor(data.length / 2)].label}
-                            </Text>
-                        )}
-                        {data.length > 1 && (
-                            <Text style={[styles.axisLabel, styles.axisRight]}>
-                                {data[data.length - 1].label}
-                            </Text>
-                        )}
-                    </>
-                )}
+            {/* Chart + X-axis */}
+            <View style={{ flex: 1 }}>
+                <View
+                    style={{ height: chartH }}
+                    onLayout={e => setContainerWidth(e.nativeEvent.layout.width)}
+                >
+                    {containerWidth > 0 && (
+                        <View style={StyleSheet.absoluteFill}>
+                            {/* grid lines */}
+                            {yTicks.map((t, i) => (
+                                <View key={i} style={[styles.gridLine, { top: t.y }]} />
+                            ))}
+
+                            {/* line segments */}
+                            {segments.map((seg, i) => (
+                                <View
+                                    key={i}
+                                    style={{
+                                        position: 'absolute',
+                                        width: seg.length,
+                                        height: 2,
+                                        backgroundColor: color,
+                                        left: seg.cx - seg.length / 2,
+                                        top: seg.cy - 1,
+                                        transform: [{ rotate: `${seg.angle}deg` }],
+                                        borderRadius: 1,
+                                        opacity: 0.85,
+                                    }}
+                                />
+                            ))}
+
+                            {/* data point dots */}
+                            {points.map((p, i) => {
+                                const selected = selectedIndex === i;
+                                const DOT = selected ? 12 : 7;
+                                return (
+                                    <Pressable
+                                        key={i}
+                                        onPress={() => onPointPress?.(data[i], i)}
+                                        hitSlop={{ top: HIT, bottom: HIT, left: HIT, right: HIT }}
+                                        style={{
+                                            position: 'absolute',
+                                            left: p.x - DOT / 2,
+                                            top: p.y - DOT / 2,
+                                        }}
+                                    >
+                                        <View
+                                            style={{
+                                                width: DOT,
+                                                height: DOT,
+                                                borderRadius: DOT / 2,
+                                                backgroundColor: selected ? Colors.text.white : color,
+                                                borderWidth: selected ? 3 : 1.5,
+                                                borderColor: selected ? color : Colors.background,
+                                            }}
+                                        />
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    )}
+                </View>
+
+                {/* X-axis labels — first, middle, last */}
+                <View style={styles.labelsRow}>
+                    {data.length > 0 && (
+                        <>
+                            <Text style={styles.axisLabel}>{data[0].label}</Text>
+                            {data.length > 2 && (
+                                <Text style={[styles.axisLabel, styles.axisCenter]}>
+                                    {data[Math.floor(data.length / 2)].label}
+                                </Text>
+                            )}
+                            {data.length > 1 && (
+                                <Text style={[styles.axisLabel, styles.axisRight]}>
+                                    {data[data.length - 1].label}
+                                </Text>
+                            )}
+                        </>
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -166,12 +193,20 @@ const styles = StyleSheet.create({
         color: Colors.text.muted,
         fontSize: FontSize.sm,
     },
+    yAxisLabel: {
+        position: 'absolute',
+        right: 4,
+        color: Colors.text.muted,
+        fontSize: 10,
+        textAlign: 'right',
+        width: Y_AXIS_W - 4,
+    },
     gridLine: {
         position: 'absolute',
         left: 0,
         right: 0,
         height: 1,
-        backgroundColor: 'rgba(148, 163, 184, 0.08)',
+        backgroundColor: 'rgba(148, 163, 184, 0.15)',
     },
     labelsRow: {
         flexDirection: 'row',

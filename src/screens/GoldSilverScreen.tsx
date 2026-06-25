@@ -413,6 +413,7 @@ export default function GoldSilverScreen() {
                                         data={chartData}
                                         color={chartColor}
                                         height={220}
+                                        showYAxis
                                         selectedIndex={selectedIndex ?? undefined}
                                         onPointPress={(pt, idx) => {
                                             setSelectedIndex(idx === selectedIndex ? null : idx);
