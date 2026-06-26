@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import type { Event } from '../screens/EventsScreen';
+import { sendNativeSMS } from './smsSender';
 
 // expo-notifications is native-only — guard every call
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -103,16 +104,15 @@ export async function triggerTestNotification(): Promise<boolean> {
     } catch { return false; }
 }
 
-// ── Schedule WhatsApp/SMS message reminders ───────────────────────────────────
+// ── Schedule auto-SMS message reminders ──────────────────────────────────────
 
 export async function scheduleMessageReminders(events: Event[]): Promise<void> {
     if (!isNative) return;
     try {
         const Notifications = require('expo-notifications');
-        // Cancel existing message reminders
         const scheduled = await Notifications.getAllScheduledNotificationsAsync();
         for (const n of scheduled) {
-            if ((n.content.data as any)?.type === 'whatsapp_reminder') {
+            if ((n.content.data as any)?.type === 'auto_sms') {
                 await Notifications.cancelScheduledNotificationAsync(n.identifier);
             }
         }
@@ -128,10 +128,10 @@ export async function scheduleMessageReminders(events: Event[]): Promise<void> {
 
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: `📱 Send message: ${event.name}`,
-                    body: `Tap to send WhatsApp/SMS to +91 ${event.contactNumber}`,
+                    title: `💌 Wish sent: ${event.name}`,
+                    body: `SMS sent to +91 ${event.contactNumber} via your SIM`,
                     data: {
-                        type: 'whatsapp_reminder',
+                        type: 'auto_sms',
                         phone: event.contactNumber,
                         message,
                         eventName: event.name,
@@ -142,4 +142,28 @@ export async function scheduleMessageReminders(events: Event[]): Promise<void> {
             });
         }
     } catch {}
+}
+
+// ── Auto-SMS listener — call once at app startup ──────────────────────────────
+
+let _listenerActive = false;
+
+export function setupAutoSmsListener(): () => void {
+    if (!isNative || _listenerActive) return () => {};
+    _listenerActive = true;
+    let sub: any;
+    try {
+        const Notifications = require('expo-notifications');
+        sub = Notifications.addNotificationReceivedListener(async (notification: any) => {
+            const data = notification?.request?.content?.data;
+            if (data?.type !== 'auto_sms') return;
+            const { phone, message } = data;
+            if (!phone || !message) return;
+            await sendNativeSMS(phone, message);
+        });
+    } catch {}
+    return () => {
+        _listenerActive = false;
+        try { sub?.remove?.(); } catch {}
+    };
 }

@@ -5,7 +5,13 @@
  */
 
 import { secureStorage } from './secureStorage';
-import { FIREBASE_DB_URL, FIREBASE_API_KEY_STORAGE, ADMIN_EMAIL, ADMIN_PHONE } from '../config/firebase';
+import {
+    FIREBASE_DB_URL,
+    FIREBASE_API_KEY_STORAGE,
+    FIREBASE_WEB_API_KEY,
+    ADMIN_EMAIL,
+    ADMIN_PHONE,
+} from '../config/firebase';
 
 export type FirebaseUser = {
     uid: string;
@@ -27,8 +33,9 @@ const adminOtpCache: Record<string, { code: string; expiry: number }> = {};
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export async function getApiKey(): Promise<string> {
-    const key = await secureStorage.getItem(FIREBASE_API_KEY_STORAGE);
-    return key ?? '';
+    // Admin can override via Admin Panel; falls back to the bundled key
+    const stored = await secureStorage.getItem(FIREBASE_API_KEY_STORAGE);
+    return stored?.trim() || FIREBASE_WEB_API_KEY;
 }
 
 export async function setApiKey(key: string): Promise<void> {

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Dimensions, View } from 'react-native';
+import { setupAutoSmsListener } from './src/utils/eventNotifications';
 import { TabView, TabBar } from 'react-native-tab-view';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -119,6 +120,11 @@ function Root() {
 }
 
 export default function App() {
+    useEffect(() => {
+        const unsub = setupAutoSmsListener();
+        return unsub;
+    }, []);
+
     return (
         <ErrorBoundary>
             <AuthProvider>

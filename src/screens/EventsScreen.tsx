@@ -16,6 +16,7 @@ import {
     View,
 } from 'react-native';
 import GradientBackground from '../components/GradientBackground';
+import StepperInput from '../components/StepperInput';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { storageGet, storageSet } from '../utils/storage';
 import { cloudRead, cloudWrite, getDeviceId } from '../utils/cloudSync';
@@ -403,12 +404,13 @@ function EventModal({ visible, event, onSave, onClose }: ModalProps) {
 
     // Message scheduling fields
     const [contactNumber, setContactNumber]   = useState('');
-    const [sendMessage, setSendMessage]       = useState(false);
+    const [sendMessage, setSendMessage]       = useState(true);
     const [msgDay, setMsgDay]                 = useState(new Date().getDate());
     const [msgMonth, setMsgMonth]             = useState(new Date().getMonth() + 1);
     const [msgYear, setMsgYear]               = useState(new Date().getFullYear());
     const [msgHour, setMsgHour]               = useState(9);
     const [msgMinute, setMsgMinute]           = useState(0);
+    const hasContact = contactNumber.replace(/\D/g,'').length === 10;
 
     useEffect(() => {
         if (visible) {
@@ -510,15 +512,7 @@ function EventModal({ visible, event, onSave, onClose }: ModalProps) {
                         {/* Date */}
                         <Text style={modal.label}>Date</Text>
                         <View style={modal.dateRow}>
-                            <View style={modal.datePicker}>
-                                <TouchableOpacity onPress={() => setDay(d => Math.max(1, d - 1))} style={modal.stepper}>
-                                    <Text style={modal.stepperText}>−</Text>
-                                </TouchableOpacity>
-                                <Text style={modal.dateValue}>{String(day).padStart(2,'0')}</Text>
-                                <TouchableOpacity onPress={() => setDay(d => Math.min(MONTH_DAYS[month-1], d + 1))} style={modal.stepper}>
-                                    <Text style={modal.stepperText}>+</Text>
-                                </TouchableOpacity>
-                            </View>
+                            <StepperInput value={day} onChange={v => setDay(Math.max(1, Math.min(MONTH_DAYS[month-1], v)))} min={1} max={31} padZero={2} />
                             <Text style={modal.dateSep}>·</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
                                 {MONTHS.map((m, i) => (
@@ -585,9 +579,10 @@ function EventModal({ visible, event, onSave, onClose }: ModalProps) {
 
                         {/* ── Contact & Message ── */}
                         <View style={modal.sectionDivider} />
-                        <Text style={modal.sectionHead}>📱 Message & Reminder</Text>
+                        <Text style={modal.sectionHead}>📱 Send Message</Text>
 
-                        <Text style={modal.label}>Mobile Number <Text style={modal.labelHint}>(optional — for WhatsApp/SMS)</Text></Text>
+                        {/* Mobile number */}
+                        <Text style={modal.label}>Mobile Number <Text style={modal.labelHint}>(optional — WhatsApp / SMS)</Text></Text>
                         <View style={modal.phoneRow}>
                             <View style={modal.countryCode}><Text style={modal.countryText}>🇮🇳 +91</Text></View>
                             <TextInput
@@ -601,97 +596,72 @@ function EventModal({ visible, event, onSave, onClose }: ModalProps) {
                             />
                         </View>
 
-                        {/* Send message toggle */}
-                        <View style={modal.toggleRow}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={modal.label}>Send WhatsApp/SMS reminder</Text>
-                                <Text style={modal.labelHint}>Schedule a message to be sent on the chosen date & time</Text>
+                        {/* Always-visible schedule box */}
+                        <View style={modal.scheduleBox}>
+                            <View style={modal.scheduleTitleRow}>
+                                <Text style={modal.scheduleTitle}>📅 Schedule Message Date & Time</Text>
+                                <View style={modal.scheduleToggleRow}>
+                                    <Text style={modal.scheduleToggleLabel}>
+                                        {sendMessage ? 'On' : 'Off'}
+                                    </Text>
+                                    <Switch
+                                        value={sendMessage}
+                                        onValueChange={setSendMessage}
+                                        trackColor={{ true: Colors.accent, false: Colors.surfaceBorder }}
+                                        thumbColor={sendMessage ? '#fff' : '#aaa'}
+                                    />
+                                </View>
                             </View>
-                            <Switch
-                                value={sendMessage}
-                                onValueChange={setSendMessage}
-                                trackColor={{ true: Colors.accent, false: Colors.surfaceBorder }}
-                                thumbColor={sendMessage ? '#fff' : '#aaa'}
-                            />
-                        </View>
+                            <Text style={modal.scheduleHint}>
+                                When enabled, a reminder notification fires at the chosen time and opens WhatsApp/SMS with your notes pre-filled.
+                            </Text>
 
-                        {/* Message schedule date/time */}
-                        {sendMessage && (
-                            <View style={modal.scheduleBox}>
-                                <Text style={modal.scheduleTitle}>📅 Schedule Message Send Time</Text>
+                            {/* Date row */}
+                            <Text style={modal.label}>Date</Text>
+                            <View style={modal.dateRow}>
+                                <StepperInput value={msgDay} onChange={v => setMsgDay(Math.max(1, Math.min(31, v)))} min={1} max={31} padZero={2} />
+                                <Text style={modal.dateSep}>·</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                                    {MONTHS.map((m, i) => (
+                                        <TouchableOpacity
+                                            key={m}
+                                            style={[modal.monthChip, msgMonth === i + 1 && modal.monthChipActive]}
+                                            onPress={() => setMsgMonth(i + 1)}
+                                        >
+                                            <Text style={[modal.monthChipText, msgMonth === i + 1 && modal.monthChipTextActive]}>{m}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
 
-                                {/* Date row */}
-                                <Text style={modal.label}>Date</Text>
-                                <View style={modal.dateRow}>
-                                    <View style={modal.datePicker}>
-                                        <TouchableOpacity onPress={() => setMsgDay(d => Math.max(1, d - 1))} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>−</Text>
-                                        </TouchableOpacity>
-                                        <Text style={modal.dateValue}>{String(msgDay).padStart(2,'0')}</Text>
-                                        <TouchableOpacity onPress={() => setMsgDay(d => Math.min(31, d + 1))} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <Text style={modal.dateSep}>·</Text>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-                                        {MONTHS.map((m, i) => (
-                                            <TouchableOpacity
-                                                key={m}
-                                                style={[modal.monthChip, msgMonth === i + 1 && modal.monthChipActive]}
-                                                onPress={() => setMsgMonth(i + 1)}
-                                            >
-                                                <Text style={[modal.monthChipText, msgMonth === i + 1 && modal.monthChipTextActive]}>{m}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
+                            {/* Year */}
+                            <Text style={modal.label}>Year</Text>
+                            <StepperInput value={msgYear} onChange={setMsgYear} min={2024} max={2099} width={64} />
 
-                                {/* Year */}
-                                <Text style={modal.label}>Year</Text>
-                                <View style={modal.datePicker}>
-                                    <TouchableOpacity onPress={() => setMsgYear(y => y - 1)} style={modal.stepper}>
-                                        <Text style={modal.stepperText}>−</Text>
-                                    </TouchableOpacity>
-                                    <Text style={modal.dateValue}>{msgYear}</Text>
-                                    <TouchableOpacity onPress={() => setMsgYear(y => y + 1)} style={modal.stepper}>
-                                        <Text style={modal.stepperText}>+</Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Time */}
-                                <Text style={[modal.label, { marginTop: 12 }]}>Time</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                    {/* Hour */}
-                                    <View style={modal.datePicker}>
-                                        <TouchableOpacity onPress={() => setMsgHour(h => (h - 1 + 24) % 24)} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>−</Text>
-                                        </TouchableOpacity>
-                                        <Text style={modal.dateValue}>{String(msgHour).padStart(2,'0')}</Text>
-                                        <TouchableOpacity onPress={() => setMsgHour(h => (h + 1) % 24)} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <Text style={[modal.dateSep, { fontSize: 20 }]}>:</Text>
-                                    {/* Minute */}
-                                    <View style={modal.datePicker}>
-                                        <TouchableOpacity onPress={() => setMsgMinute(m => m === 0 ? 45 : m - 15)} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>−</Text>
-                                        </TouchableOpacity>
-                                        <Text style={modal.dateValue}>{String(msgMinute).padStart(2,'0')}</Text>
-                                        <TouchableOpacity onPress={() => setMsgMinute(m => (m + 15) % 60)} style={modal.stepper}>
-                                            <Text style={modal.stepperText}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <Text style={[modal.labelHint, { marginTop: 0 }]}>
-                                        {msgHour < 12 ? 'AM' : 'PM'} · {msgHour >= 12 ? msgHour - 12 || 12 : msgHour || 12}:{String(msgMinute).padStart(2,'0')}
+                            {/* Time */}
+                            <Text style={[modal.label, { marginTop: 12 }]}>Time</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                {/* Hour */}
+                                <StepperInput value={msgHour} onChange={v => setMsgHour(((v % 24) + 24) % 24)} min={0} max={23} padZero={2} />
+                                <Text style={[modal.dateSep, { fontSize: 22, fontWeight: '700' }]}>:</Text>
+                                {/* Minute */}
+                                <StepperInput value={msgMinute} onChange={v => setMsgMinute(Math.round(Math.max(0, Math.min(59, v)) / 15) * 15 % 60)} min={0} max={59} step={15} padZero={2} />
+                                {/* AM/PM + formatted time */}
+                                <View style={modal.ampmBadge}>
+                                    <Text style={modal.ampmText}>
+                                        {msgHour < 12 ? 'AM' : 'PM'}
                                     </Text>
                                 </View>
-
-                                <Text style={modal.scheduleNote}>
-                                    A notification will appear at this time reminding you to send the message via WhatsApp or SMS. Tap the notification → opens WhatsApp with the message pre-filled.
+                                <Text style={modal.timeFormatted}>
+                                    {msgHour >= 12 ? msgHour - 12 || 12 : msgHour || 12}:{String(msgMinute).padStart(2,'0')} {msgHour < 12 ? 'AM' : 'PM'}
+                                    {'\n'}{String(msgDay).padStart(2,'0')} {MONTHS[msgMonth-1]} {msgYear}
                                 </Text>
                             </View>
-                        )}
+
+                                <Text style={modal.scheduleNote}>
+                                    🔔 You'll get a notification at this time — tap it to open WhatsApp/SMS and send the wish to +91 {contactNumber || '—'}.
+                                </Text>
+                            </View>
 
                         {/* Active toggle */}
                         <View style={[modal.toggleRow, { marginTop: 16 }]}>
@@ -867,15 +837,28 @@ const modal = StyleSheet.create({
     notifyText: { fontSize: FontSize.xs, color: Colors.text.secondary },
     notifyTextActive: { color: Colors.accent, fontWeight: '600' },
     toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+    sectionSub: { fontSize: FontSize.xs, color: Colors.text.muted, lineHeight: 16, marginBottom: 8 },
     scheduleBox: {
-        backgroundColor: Colors.input, borderRadius: Radii.lg, padding: Spacing.lg,
-        borderWidth: 1, borderColor: Colors.inputBorder, marginTop: 8,
+        backgroundColor: Colors.surface, borderRadius: Radii.lg, padding: Spacing.lg,
+        borderWidth: 1, borderColor: Colors.accent + '40', marginTop: 12,
     },
-    scheduleTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.accent, marginBottom: 4 },
+    scheduleTitleRow: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6,
+    },
+    scheduleToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    scheduleToggleLabel: { fontSize: FontSize.xs, color: Colors.text.muted },
+    scheduleTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.accent },
+    scheduleHint: { fontSize: FontSize.xs, color: Colors.text.muted, lineHeight: 16, marginBottom: 4 },
     scheduleNote: {
-        fontSize: FontSize.xs, color: Colors.text.muted, lineHeight: 16, marginTop: 12,
+        fontSize: FontSize.xs, color: Colors.accent, lineHeight: 16, marginTop: 12,
         borderTopWidth: 1, borderTopColor: Colors.surfaceBorder, paddingTop: 8,
     },
+    ampmBadge: {
+        backgroundColor: Colors.accentSoft, borderRadius: Radii.sm,
+        paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: Colors.accent + '40',
+    },
+    ampmText: { color: Colors.accent, fontWeight: '700', fontSize: FontSize.sm },
+    timeFormatted: { color: Colors.text.secondary, fontSize: FontSize.xs, lineHeight: 16 },
     actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
     cancelBtn: {
         flex: 1, paddingVertical: 14, borderRadius: Radii.md, alignItems: 'center',

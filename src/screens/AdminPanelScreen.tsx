@@ -21,6 +21,7 @@ export default function AdminPanelScreen() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
+
     // Users tab
     const [users, setUsers] = useState<Array<{ uid: string; email?: string; phone?: string; role?: string }>>([]);
     const [usersLoading, setUsersLoading] = useState(false);
@@ -104,7 +105,7 @@ export default function AdminPanelScreen() {
                     <TouchableOpacity style={[styles.tabBtn, tab === 'firebase' && styles.tabBtnActive]} onPress={() => setTab('firebase')}>
                         <Text style={[styles.tabBtnText, tab === 'firebase' && styles.tabBtnTextActive]}>🔥 Firebase</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.tabBtn, tab === 'users' && styles.tabBtnActive]} onPress={() => setTab('users')}>
+<TouchableOpacity style={[styles.tabBtn, tab === 'users' && styles.tabBtnActive]} onPress={() => setTab('users')}>
                         <Text style={[styles.tabBtnText, tab === 'users' && styles.tabBtnTextActive]}>👥 Users</Text>
                     </TouchableOpacity>
                 </View>
@@ -170,7 +171,7 @@ export default function AdminPanelScreen() {
                     </View>
                 </>}
 
-                {/* ── Users Tab ── */}
+{/* ── Users Tab ── */}
                 {tab === 'users' && <>
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>

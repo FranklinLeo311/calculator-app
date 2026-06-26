@@ -20,7 +20,6 @@ import {
     sendMagicLink,
     generateAndStoreOtp,
     verifyOtp,
-    getApiKey,
 } from '../utils/firebaseAuth';
 import { secureStorage } from '../utils/secureStorage';
 import { FIREBASE_GOOGLE_CLIENT_ID_STORAGE } from '../config/firebase';
@@ -100,12 +99,10 @@ export default function AuthScreen() {
         if (!email.trim() || !email.includes('@')) { setError('Enter a valid email address'); return; }
         setLoading(true); setError('');
         try {
-            const apiKey = await getApiKey();
-            if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
-            // Store OTP in Firebase, get the code back to show in UI
+            // generateAndStoreOtp handles admin bypass internally — no pre-check needed
             const code = await generateAndStoreOtp(`email:${email.trim().toLowerCase()}`);
             setGeneratedOtp(code);
-            // Also send Firebase magic link as backup
+            // Send Firebase magic link as backup (fire-and-forget, may fail if not configured)
             sendMagicLink(email.trim().toLowerCase(),
                 'https://my-maths-3bef4.firebaseapp.com/__/auth/action').catch(() => {});
             setStep('email_otp');
@@ -113,7 +110,7 @@ export default function AuthScreen() {
             setTimeout(() => otpInputRef.current?.focus(), 300);
         } catch (e: any) {
             setError(e.message === 'FIREBASE_NOT_CONFIGURED'
-                ? 'Firebase not configured. Admin needs to add the API key in Settings → Admin Panel.'
+                ? 'Firebase not configured. Ask admin to add API key in Admin Panel → Firebase Setup.'
                 : 'Failed to send OTP. Please try again.');
         }
         setLoading(false);
@@ -140,8 +137,7 @@ export default function AuthScreen() {
         if (cleaned.length !== 10) { setError('Enter a valid 10-digit mobile number'); return; }
         setLoading(true); setError('');
         try {
-            const apiKey = await getApiKey();
-            if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
+            // generateAndStoreOtp handles admin bypass internally — no pre-check needed
             const code = await generateAndStoreOtp(`phone:${cleaned}`);
             setGeneratedOtp(code);
             setStep('phone_otp');
@@ -149,7 +145,7 @@ export default function AuthScreen() {
             setTimeout(() => otpInputRef.current?.focus(), 300);
         } catch (e: any) {
             setError(e.message === 'FIREBASE_NOT_CONFIGURED'
-                ? 'Firebase not configured. Admin needs to set it up first.'
+                ? 'Firebase not configured. Ask admin to add API key in Admin Panel → Firebase Setup.'
                 : 'Failed to send OTP. Try again.');
         }
         setLoading(false);
