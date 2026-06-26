@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
+    DeviceEventEmitter,
     ScrollView,
     StyleSheet,
     Switch,
@@ -9,17 +10,20 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { loadTabOrder, saveTabOrder, TAB_ORDER_CHANGED } from '../utils/orderPreferences';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import GradientBackground from '../components/GradientBackground';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { storageGet, storageRemove, storageSet } from '../utils/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme, ThemeMode } from '../context/ThemeContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AppSettings = {
     calcHistoryLimit: number;
+    calcHistoryBoxHeight: number;
     defaultTab: string;
     metalCacheTtlHours: number;
     metalDutyFactor: number;
@@ -42,10 +46,13 @@ type AppSettings = {
     eventNotifyMinute: number;
     eventNotifyDaysBefore: number;
     cloudSyncUrl: string;
+    // UX
+    hapticFeedback: boolean;
 };
 
 const DEFAULTS: AppSettings = {
     calcHistoryLimit: 50,
+    calcHistoryBoxHeight: 130,
     defaultTab: 'standard',
     metalCacheTtlHours: 6,
     metalDutyFactor: 1.1495,
@@ -63,15 +70,34 @@ const DEFAULTS: AppSettings = {
     eventNotifyMinute: 0,
     eventNotifyDaysBefore: 3,
     cloudSyncUrl: '',
+    hapticFeedback: true,
 };
 
 const STORAGE_KEY = 'app_settings_v1';
 
+// Tab definitions for reorder UI (mirrors App.tsx USER_ROUTES)
+const ALL_TABS: { key: string; title: string }[] = [
+    { key: 'standard',  title: 'Standard'    },
+    { key: 'events',    title: '📅 Events'    },
+    { key: 'tools',     title: 'Tools'       },
+    { key: 'passwords', title: '🔐 Vault'     },
+    { key: 'documents', title: '📁 Docs'      },
+    { key: 'units',     title: '📐 Units'     },
+    { key: 'metals',    title: 'Metals'      },
+    { key: 'currency',  title: '🌍 Currency'  },
+    { key: 'news',      title: '📰 Tech'      },
+    { key: 'profile',   title: '👤 Profile'   },
+    { key: 'jobs',      title: '💼 Jobs'      },
+    { key: 'settings',  title: '⚙️ Settings'  },
+];
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }) {
+    const { themeMode, setThemeMode } = useTheme();
     const [settings, setSettings]     = useState<AppSettings>(DEFAULTS);
     const [savedAt,  setSavedAt]      = useState<number | null>(null);
+    const [tabOrder, setTabOrder]     = useState<string[]>(ALL_TABS.map(t => t.key));
     const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hideToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,6 +105,9 @@ export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }
     useEffect(() => {
         storageGet<AppSettings>(STORAGE_KEY).then(data => {
             if (data) setSettings({ ...DEFAULTS, ...data });
+        });
+        loadTabOrder().then(saved => {
+            if (saved && saved.length >= ALL_TABS.length) setTabOrder(saved);
         });
     }, []);
 
@@ -186,6 +215,18 @@ export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }
         }
     };
 
+    const moveTab = (idx: number, dir: -1 | 1) => {
+        const swap = idx + dir;
+        if (swap < 0 || swap >= tabOrder.length) return;
+        const next = [...tabOrder];
+        [next[idx], next[swap]] = [next[swap], next[idx]];
+        setTabOrder(next);
+        saveTabOrder(next).then(() => {
+            DeviceEventEmitter.emit(TAB_ORDER_CHANGED);
+            setSavedAt(Date.now());
+        });
+    };
+
     const clearAllData = () => {
         Alert.alert(
             'Clear All App Data',
@@ -239,6 +280,10 @@ export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }
                 <View style={styles.card}>
                     <SettingRow label="History Limit">
                         {stepper('calcHistoryLimit', settings.calcHistoryLimit, 10, 200, 10)}
+                    </SettingRow>
+                    <Divider />
+                    <SettingRow label="History Box Height">
+                        {stepper('calcHistoryBoxHeight', settings.calcHistoryBoxHeight, 80, 320, 20, 'px')}
                     </SettingRow>
                     <Divider />
                     <SettingRow label="Default Tab">
@@ -333,6 +378,32 @@ export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }
                 {/* ── Appearance ───────────────────────────────────────── */}
                 <SectionHeader label="Appearance" />
                 <View style={styles.card}>
+                    {/* Theme */}
+                    <View style={styles.chipSettingRow}>
+                        <View>
+                            <Text style={styles.rowLabel}>Theme</Text>
+                            <Text style={styles.helperText}>Dark, Light, or follow device setting</Text>
+                        </View>
+                    </View>
+                    <View style={[styles.chipRowInline, { marginTop: 6, marginBottom: 4 }]}>
+                        {([
+                            { key: 'dark',   label: '🌙 Dark'   },
+                            { key: 'light',  label: '☀️ Light'  },
+                            { key: 'system', label: '📱 System' },
+                        ] as { key: ThemeMode; label: string }[]).map(opt => (
+                            <TouchableOpacity
+                                key={opt.key}
+                                style={[styles.optChip, themeMode === opt.key && styles.optChipActive]}
+                                onPress={() => setThemeMode(opt.key)}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={[styles.optChipText, themeMode === opt.key && styles.optChipTextActive]}>
+                                    {opt.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                    <Divider />
                     <View style={styles.chipSettingRow}>
                         <Text style={styles.rowLabel}>Font Size</Text>
                         <View style={styles.chipRowInline}>
@@ -454,6 +525,61 @@ export default function SettingsScreen({ onSignOut }: { onSignOut?: () => void }
                     <Text style={[styles.helperText, { marginTop: 6, lineHeight: 16 }]}>
                         Setup: firebase.google.com → New project → Realtime Database (test mode) → copy URL
                     </Text>
+                </View>
+
+                {/* ── Haptic Feedback ──────────────────────────────────── */}
+                <SectionHeader label="Touch & Feedback" />
+                <View style={styles.card}>
+                    <SettingRow label="Haptic Feedback">
+                        <Switch
+                            value={settings.hapticFeedback}
+                            onValueChange={v => updateImmediate('hapticFeedback', v)}
+                            trackColor={{ false: Colors.inputBorder, true: Colors.accentSoft }}
+                            thumbColor={settings.hapticFeedback ? Colors.accent : Colors.text.muted}
+                        />
+                    </SettingRow>
+                    <View style={styles.hapticHint}>
+                        <Text style={styles.helperText}>Vibration on button presses and actions</Text>
+                    </View>
+                </View>
+
+                {/* ── Menu Order ───────────────────────────────────────── */}
+                <SectionHeader label="Menu Tab Order" />
+                <View style={styles.card}>
+                    <View style={styles.reorderHeaderRow}>
+                        <Text style={styles.helperText}>Drag ▲ ▼ to reorder the top navigation tabs</Text>
+                    </View>
+                    {tabOrder.map((key, idx) => {
+                        const tab = ALL_TABS.find(t => t.key === key);
+                        if (!tab) return null;
+                        return (
+                            <View key={key}>
+                                <View style={styles.tabOrderRow}>
+                                    <View style={styles.tabOrderArrows}>
+                                        <TouchableOpacity
+                                            onPress={() => moveTab(idx, -1)}
+                                            style={[styles.tabArrowBtn, idx === 0 && styles.tabArrowBtnDisabled]}
+                                            disabled={idx === 0}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={styles.tabArrowText}>▲</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => moveTab(idx, 1)}
+                                            style={[styles.tabArrowBtn, idx === tabOrder.length - 1 && styles.tabArrowBtnDisabled]}
+                                            disabled={idx === tabOrder.length - 1}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={styles.tabArrowText}>▼</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text style={styles.tabOrderLabel}>{tab.title}</Text>
+                                    <Text style={styles.tabOrderIndex}>{idx + 1}</Text>
+                                </View>
+                                {idx < tabOrder.length - 1 && <Divider />}
+                            </View>
+                        );
+                    })}
                 </View>
 
                 {/* ── Data Management ──────────────────────────────────── */}
@@ -872,6 +998,55 @@ const styles = StyleSheet.create({
     },
     optChipTextActive: {
         color: '#fff',
+    },
+
+    // Haptic hint
+    hapticHint: {
+        paddingBottom: Spacing.sm,
+    },
+
+    // Tab order reorder
+    reorderHeaderRow: {
+        paddingVertical: Spacing.lg,
+    },
+    tabOrderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.md,
+    },
+    tabOrderArrows: {
+        flexDirection: 'row',
+        gap: 4,
+        marginRight: Spacing.md,
+    },
+    tabArrowBtn: {
+        width: 26,
+        height: 26,
+        borderRadius: Radii.sm,
+        backgroundColor: Colors.input,
+        borderWidth: 1,
+        borderColor: Colors.inputBorder,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    tabArrowBtnDisabled: {
+        opacity: 0.2,
+    },
+    tabArrowText: {
+        color: Colors.accent,
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    tabOrderLabel: {
+        flex: 1,
+        color: Colors.text.primary,
+        fontSize: FontSize.body,
+    },
+    tabOrderIndex: {
+        color: Colors.text.muted,
+        fontSize: FontSize.xs,
+        minWidth: 20,
+        textAlign: 'right',
     },
 
     // About

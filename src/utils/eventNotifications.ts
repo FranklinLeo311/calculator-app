@@ -148,22 +148,43 @@ export async function scheduleMessageReminders(events: Event[]): Promise<void> {
 
 let _listenerActive = false;
 
+export const NAVIGATE_TO_EVENTS_EVENT = 'navigate_to_events';
+
 export function setupAutoSmsListener(): () => void {
     if (!isNative || _listenerActive) return () => {};
     _listenerActive = true;
-    let sub: any;
+    let receivedSub: any;
+    let responseSub: any;
     try {
         const Notifications = require('expo-notifications');
-        sub = Notifications.addNotificationReceivedListener(async (notification: any) => {
+        const { DeviceEventEmitter } = require('react-native');
+
+        receivedSub = Notifications.addNotificationReceivedListener(async (notification: any) => {
             const data = notification?.request?.content?.data;
             if (data?.type !== 'auto_sms') return;
             const { phone, message } = data;
             if (!phone || !message) return;
             await sendNativeSMS(phone, message);
         });
+
+        // When user taps a notification (app was backgrounded/killed):
+        // auto_sms type → send SMS automatically then navigate to Events
+        // event_reminder type → just navigate to Events
+        responseSub = Notifications.addNotificationResponseReceivedListener(async (response: any) => {
+            const data = response?.notification?.request?.content?.data;
+            if (data?.type === 'auto_sms') {
+                const { phone, message } = data;
+                // Auto-send via SIM — one tap on notification sends the wish
+                if (phone && message) await sendNativeSMS(phone, message);
+            }
+            if (data?.type === 'event_reminder' || data?.type === 'auto_sms') {
+                DeviceEventEmitter.emit(NAVIGATE_TO_EVENTS_EVENT);
+            }
+        });
     } catch {}
     return () => {
         _listenerActive = false;
-        try { sub?.remove?.(); } catch {}
+        try { receivedSub?.remove?.(); } catch {}
+        try { responseSub?.remove?.(); } catch {}
     };
 }

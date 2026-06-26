@@ -55,6 +55,12 @@ const ALIASES: Record<string, string> = {
 export type ParsedResume = {
     name?: string;
     title?: string;
+    email?: string;
+    phone?: string;
+    linkedIn?: string;
+    github?: string;
+    location?: string;
+    experienceYears?: number;
     skills: string[];
     rawText: string;
     fileName: string;
@@ -104,6 +110,42 @@ function detectSkills(text: string): string[] {
     }
 
     return Array.from(found);
+}
+
+// ── Contact & location extraction ────────────────────────────────────────────
+function extractContactInfo(text: string): {
+    email?: string; phone?: string; linkedIn?: string; github?: string;
+    location?: string; experienceYears?: number;
+} {
+    const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = text.match(/(?:\+?\d[\s\-.]?)?(?:\(?\d{3}\)?[\s\-.]?)?\d{3}[\s\-.]?\d{4}/);
+    const linkedInMatch = text.match(/linkedin\.com\/in\/([A-Za-z0-9\-_%]+)/i);
+    const githubMatch = text.match(/github\.com\/([A-Za-z0-9\-_%]+)/i);
+
+    // Location: look for "City, State" or "City, Country" patterns near keywords
+    let location: string | undefined;
+    const locationMatch = text.match(
+        /(?:location|address|city|based in)[:\s]+([A-Za-z\s,]+(?:Tamil Nadu|Maharashtra|Karnataka|Telangana|Delhi|India|remote))/i
+    ) ?? text.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)?,\s*(?:Tamil Nadu|Maharashtra|Karnataka|Telangana|Delhi NCR|Noida|Gurgaon|Kochi|Coimbatore|Mumbai|Bangalore|Hyderabad|Pune|Chennai|India|Remote))\b/);
+    if (locationMatch) location = locationMatch[1].trim();
+
+    // Experience years: "X years", "X+ years", "X yrs"
+    let experienceYears: number | undefined;
+    const expMatch = text.match(/(\d+)\s*\+?\s*(?:years?|yrs?)(?:\s+of)?\s+(?:experience|exp)/i)
+        ?? text.match(/experience[:\s]+(\d+)\s*\+?\s*(?:years?|yrs?)/i);
+    if (expMatch) {
+        const n = parseInt(expMatch[1], 10);
+        if (!isNaN(n) && n >= 0 && n <= 40) experienceYears = n;
+    }
+
+    return {
+        email: emailMatch?.[0],
+        phone: phoneMatch?.[0]?.trim(),
+        linkedIn: linkedInMatch ? `linkedin.com/in/${linkedInMatch[1]}` : undefined,
+        github: githubMatch ? `github.com/${githubMatch[1]}` : undefined,
+        location,
+        experienceYears,
+    };
 }
 
 // ── Name / title heuristics ──────────────────────────────────────────────────
@@ -173,6 +215,7 @@ export async function pickAndParseResume(): Promise<ParsedResume | null> {
 
     const skills = detectSkills(rawText);
     const { name, title } = extractNameAndTitle(rawText);
+    const contact = extractContactInfo(rawText);
 
-    return { name, title, skills, rawText, fileName, sizeKb, base64Uri };
+    return { name, title, ...contact, skills, rawText, fileName, sizeKb, base64Uri };
 }

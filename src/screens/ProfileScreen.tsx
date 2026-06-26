@@ -171,6 +171,12 @@ export default function ProfileScreen({ isFocused }: { isFocused?: boolean }) {
                     resumeBase64Uri: parsed.base64Uri,
                     ...(parsed.name ? { name: parsed.name } : {}),
                     ...(parsed.title ? { title: parsed.title } : {}),
+                    ...(parsed.email ? { email: parsed.email } : {}),
+                    ...(parsed.phone ? { phone: parsed.phone } : {}),
+                    ...(parsed.linkedIn ? { linkedIn: parsed.linkedIn } : {}),
+                    ...(parsed.github ? { github: parsed.github } : {}),
+                    ...(parsed.location ? { location: parsed.location } : {}),
+                    ...(parsed.experienceYears !== undefined ? { experienceYears: parsed.experienceYears } : {}),
                     skills: parsed.skills.length > 0 ? parsed.skills : prev.skills,
                 };
                 storageSet(STORAGE_KEY, next);

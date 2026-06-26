@@ -27,8 +27,10 @@ export type FirebaseUser = {
 const AUTH_BASE = 'https://identitytoolkit.googleapis.com/v1/accounts';
 const TOKEN_BASE = 'https://securetoken.googleapis.com/v1/token';
 
-// In-memory OTP cache used ONLY for default admins (no Firebase needed)
-const adminOtpCache: Record<string, { code: string; expiry: number }> = {};
+// In-memory OTP cache for ALL users.
+// OTP is displayed on-screen (no SMS yet), so memory is safe and avoids
+// Firebase DB permission errors (unauthenticated writes blocked by default rules).
+const otpCache: Record<string, { code: string; expiry: number }> = {};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,22 +87,17 @@ function isDefaultAdmin(key: string): boolean {
 export async function generateAndStoreOtp(key: string): Promise<string> {
     const code = randomCode();
     const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    otpCache[key] = { code, expiry };
 
-    if (isDefaultAdmin(key)) {
-        // Default admin never needs Firebase — store in memory
-        adminOtpCache[key] = { code, expiry };
-        return code;
+    // For regular phone users (not default admin), also attempt to SMS the OTP
+    // from the device SIM (admin's Jio number) — fire-and-forget, won't block.
+    if (key.startsWith('phone:') && !isDefaultAdmin(key)) {
+        const phone = key.slice(6);
+        import('./smsSender').then(({ sendNativeSMS }) => {
+            sendNativeSMS(phone, `Your My Maths OTP is: ${code}. Valid for 10 minutes. Do not share.`).catch(() => {});
+        });
     }
 
-    // Regular user — store in Firebase Realtime DB
-    const apiKey = await getApiKey();
-    if (!apiKey) throw new Error('FIREBASE_NOT_CONFIGURED');
-
-    await fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, expiry }),
-    });
     return code;
 }
 
@@ -116,15 +113,15 @@ export async function verifyOtp(
     email?: string,
     phone?: string,
 ): Promise<FirebaseUser> {
-    // Default admin — check memory cache
-    if (isDefaultAdmin(key)) {
-        const cached = adminOtpCache[key];
-        if (!cached) throw new Error('OTP_INVALID');
-        if (Date.now() > cached.expiry) { delete adminOtpCache[key]; throw new Error('OTP_EXPIRED'); }
-        if (cached.code !== enteredCode.trim()) throw new Error('OTP_INVALID');
-        delete adminOtpCache[key];
+    // Verify from in-memory cache (works for all users including default admins)
+    const cached = otpCache[key];
+    if (!cached) throw new Error('OTP_INVALID');
+    if (Date.now() > cached.expiry) { delete otpCache[key]; throw new Error('OTP_EXPIRED'); }
+    if (cached.code !== enteredCode.trim()) throw new Error('OTP_INVALID');
+    delete otpCache[key]; // one-time use
 
-        // Build a stable admin user (no Firebase needed)
+    // Default admin — build stable user without Firebase
+    if (isDefaultAdmin(key)) {
         const uid = phone ? `admin_phone_${phone}` : `admin_email_${sanitizeKey(email ?? '')}`;
         const user: FirebaseUser = {
             uid,
@@ -134,27 +131,11 @@ export async function verifyOtp(
             refreshToken: '',
             role: 'admin',
         };
-        // Persist to Firebase in background (won't fail if no API key)
         trySaveAdminToDb(user);
         return user;
     }
 
-    // Regular user — verify from Firebase DB
-    const res = await fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`);
-    if (!res.ok) throw new Error('OTP_INVALID');
-    const stored: { code: string; expiry: number } | null = await res.json();
-    if (!stored) throw new Error('OTP_INVALID');
-    if (Date.now() > stored.expiry) {
-        // Clean up expired OTP
-        fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, { method: 'DELETE' }).catch(() => {});
-        throw new Error('OTP_EXPIRED');
-    }
-    if (stored.code !== enteredCode.trim()) throw new Error('OTP_INVALID');
-
-    // Delete OTP record (one-time use)
-    fetch(`${FIREBASE_DB_URL}/otp/${sanitizeKey(key)}.json`, { method: 'DELETE' }).catch(() => {});
-
-    // Get or create Firebase anonymous user for this identity
+    // Regular user — get or create Firebase identity
     return getOrCreateIdentityUser(email, phone);
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import GradientBackground from '../components/GradientBackground';
 import Display from '../components/Display';
@@ -9,9 +9,19 @@ import useCalculator from '../hooks/useCalculator';
 import type { HistoryItem } from '../hooks/useCalculator';
 import type { CalcActions } from '../components/ButtonGrid';
 import { Colors, FontSize, Spacing, Radii } from '../config/theme';
+import { storageGet } from '../utils/storage';
+
+const DEFAULT_HISTORY_HEIGHT = 130;
 
 export default function StandardScreen() {
     const calc = useCalculator('calc_history_standard_v1');
+    const [historyBoxHeight, setHistoryBoxHeight] = useState(DEFAULT_HISTORY_HEIGHT);
+
+    useEffect(() => {
+        storageGet<{ calcHistoryBoxHeight?: number }>('app_settings_v1').then(s => {
+            if (s?.calcHistoryBoxHeight) setHistoryBoxHeight(s.calcHistoryBoxHeight);
+        });
+    }, []);
     const { expression, result, history } = calc;
     const onHistorySelect = calc.loadFromHistory;
     const onHistoryClear = calc.clearHistory;
@@ -29,7 +39,7 @@ export default function StandardScreen() {
             <View style={styles.top}>
                 <Display formula={expression} result={result} />
 
-                <View style={styles.historySection}>
+                <View style={[styles.historySection, { maxHeight: historyBoxHeight }]}>
                     <View style={styles.historyHeader}>
                         <Text style={styles.historyTitle}>History</Text>
                         {history.length > 0 && (

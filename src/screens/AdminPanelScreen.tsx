@@ -9,8 +9,10 @@ import { Colors, FontSize, Radii, Spacing } from '../config/theme';
 import { FIREBASE_API_KEY_STORAGE, FIREBASE_GOOGLE_CLIENT_ID_STORAGE, FIREBASE_DB_URL, ADMIN_EMAIL, ADMIN_PHONE } from '../config/firebase';
 import { getAdminConfig, saveAdminConfig, setApiKey, getApiKey, listUsers, promoteToAdmin, revokeAdmin } from '../utils/firebaseAuth';
 import { useAuth } from '../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FAST2SMS_KEY_STORAGE, sendCloudSMS } from '../utils/smsSender';
 
-type Tab = 'firebase' | 'users';
+type Tab = 'firebase' | 'sms' | 'users';
 
 export default function AdminPanelScreen() {
     const { user } = useAuth();
@@ -21,6 +23,13 @@ export default function AdminPanelScreen() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
+    // SMS tab
+    const [smsKey, setSmsKey] = useState('');
+    const [smsTestPhone, setSmsTestPhone] = useState('');
+    const [smsSaving, setSmsSaving] = useState(false);
+    const [smsSaved, setSmsSaved] = useState(false);
+    const [smsTesting, setSmsTesting] = useState(false);
+    const [smsTestResult, setSmsTestResult] = useState<string | null>(null);
 
     // Users tab
     const [users, setUsers] = useState<Array<{ uid: string; email?: string; phone?: string; role?: string }>>([]);
@@ -28,12 +37,14 @@ export default function AdminPanelScreen() {
 
     const load = useCallback(async () => {
         setLoading(true);
-        const [key, gId] = await Promise.all([
+        const [key, gId, sKey] = await Promise.all([
             getApiKey(),
             secureStorage.getItem(FIREBASE_GOOGLE_CLIENT_ID_STORAGE),
+            AsyncStorage.getItem(FAST2SMS_KEY_STORAGE),
         ]);
         setApiKeyState(key ?? '');
         setGoogleClientId(gId ?? '');
+        setSmsKey(sKey ?? '');
         setLoading(false);
     }, []);
 
@@ -72,6 +83,24 @@ export default function AdminPanelScreen() {
         ]);
     };
 
+    const handleSaveSmsKey = async () => {
+        setSmsSaving(true);
+        await AsyncStorage.setItem(FAST2SMS_KEY_STORAGE, smsKey.trim());
+        setSmsSaving(false);
+        setSmsSaved(true);
+        setTimeout(() => setSmsSaved(false), 2000);
+    };
+
+    const handleTestSms = async () => {
+        const digits = smsTestPhone.replace(/\D/g, '');
+        if (digits.length !== 10) { Alert.alert('Invalid', 'Enter a 10-digit mobile number to test.'); return; }
+        setSmsTesting(true);
+        setSmsTestResult(null);
+        const ok = await sendCloudSMS(digits, 'Test SMS from My Maths app. Auto-send is working! 🎉');
+        setSmsTesting(false);
+        setSmsTestResult(ok ? '✅ SMS sent successfully!' : '❌ Failed — check your API key.');
+    };
+
     const handleRevoke = (uid: string, name: string) => {
         Alert.alert('Revoke Admin', `Remove admin access from ${name}?`, [
             { text: 'Cancel', style: 'cancel' },
@@ -105,7 +134,10 @@ export default function AdminPanelScreen() {
                     <TouchableOpacity style={[styles.tabBtn, tab === 'firebase' && styles.tabBtnActive]} onPress={() => setTab('firebase')}>
                         <Text style={[styles.tabBtnText, tab === 'firebase' && styles.tabBtnTextActive]}>🔥 Firebase</Text>
                     </TouchableOpacity>
-<TouchableOpacity style={[styles.tabBtn, tab === 'users' && styles.tabBtnActive]} onPress={() => setTab('users')}>
+                    <TouchableOpacity style={[styles.tabBtn, tab === 'sms' && styles.tabBtnActive]} onPress={() => setTab('sms')}>
+                        <Text style={[styles.tabBtnText, tab === 'sms' && styles.tabBtnTextActive]}>💬 SMS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.tabBtn, tab === 'users' && styles.tabBtnActive]} onPress={() => setTab('users')}>
                         <Text style={[styles.tabBtnText, tab === 'users' && styles.tabBtnTextActive]}>👥 Users</Text>
                     </TouchableOpacity>
                 </View>
@@ -171,7 +203,66 @@ export default function AdminPanelScreen() {
                     </View>
                 </>}
 
-{/* ── Users Tab ── */}
+                {/* ── SMS Tab ── */}
+                {tab === 'sms' && <>
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>💬 Auto-SMS via Fast2SMS</Text>
+                        <Text style={styles.helperText}>
+                            When configured, event reminders are sent automatically as SMS at the scheduled time — no manual tap needed.
+                        </Text>
+
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoTitle}>📋 How to get a Free API Key</Text>
+                            <Text style={styles.infoBody}>
+                                {`1. Go to fast2sms.com and register\n2. Verify your mobile number\n3. Dashboard → Dev API → Copy your API Key\n4. Free plan: 50 SMS/day\n\nNote: Fast2SMS works only in India (+91 numbers).`}
+                            </Text>
+                        </View>
+
+                        <Text style={styles.label}>Fast2SMS API Key</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={smsKey}
+                            onChangeText={setSmsKey}
+                            placeholder="Paste your Fast2SMS API key here"
+                            placeholderTextColor={Colors.text.muted}
+                            autoCapitalize="none"
+                            secureTextEntry
+                        />
+
+                        <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveSmsKey} disabled={smsSaving}>
+                            {smsSaving ? <ActivityIndicator color="#fff" size="small" /> :
+                                <Text style={styles.primaryBtnText}>{smsSaved ? '✓ Saved!' : 'Save SMS Key'}</Text>}
+                        </TouchableOpacity>
+
+                        {/* Test SMS */}
+                        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🧪 Send Test SMS</Text>
+                        <Text style={styles.label}>Test Mobile Number (10 digits)</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={smsTestPhone}
+                            onChangeText={v => setSmsTestPhone(v.replace(/\D/g,''))}
+                            placeholder="9876543210"
+                            placeholderTextColor={Colors.text.muted}
+                            keyboardType="phone-pad"
+                            maxLength={10}
+                        />
+                        <TouchableOpacity
+                            style={[styles.primaryBtn, { backgroundColor: Colors.chart.blue }]}
+                            onPress={handleTestSms}
+                            disabled={smsTesting}
+                        >
+                            {smsTesting ? <ActivityIndicator color="#fff" size="small" /> :
+                                <Text style={styles.primaryBtnText}>Send Test SMS</Text>}
+                        </TouchableOpacity>
+                        {smsTestResult && (
+                            <Text style={[styles.helperText, { marginTop: 8, color: smsTestResult.startsWith('✅') ? Colors.accent : Colors.error }]}>
+                                {smsTestResult}
+                            </Text>
+                        )}
+                    </View>
+                </>}
+
+                {/* ── Users Tab ── */}
                 {tab === 'users' && <>
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>

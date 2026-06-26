@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Dimensions, View } from 'react-native';
-import { setupAutoSmsListener } from './src/utils/eventNotifications';
+import { ActivityIndicator, DeviceEventEmitter, SafeAreaView, StyleSheet, Dimensions, View } from 'react-native';
+import { setupAutoSmsListener, NAVIGATE_TO_EVENTS_EVENT } from './src/utils/eventNotifications';
+import { loadTabOrder, TAB_ORDER_CHANGED } from './src/utils/orderPreferences';
 import { TabView, TabBar } from 'react-native-tab-view';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AuthScreen from './src/screens/AuthScreen';
 import StandardScreen from './src/screens/StandardScreen';
 import GoldSilverScreen from './src/screens/GoldSilverScreen';
@@ -18,7 +20,7 @@ import JobsScreen from './src/screens/JobsScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AdminPanelScreen from './src/screens/AdminPanelScreen';
-import { Colors, FontSize } from './src/config/theme';
+import { FontSize } from './src/config/theme';
 
 const INITIAL_LAYOUT = { width: Dimensions.get('window').width };
 
@@ -50,9 +52,37 @@ type RouteKey = UserRouteKey | AdminRouteKey;
 
 function MainApp() {
     const { isAdmin, signOut } = useAuth();
-    const ROUTES = isAdmin ? ADMIN_ROUTES : USER_ROUTES;
-    const [index, setIndex] = React.useState(0);
-    const profileIndex = ROUTES.findIndex(r => r.key === 'profile');
+    const { colors } = useTheme();
+    const BASE_ROUTES = isAdmin ? ADMIN_ROUTES : USER_ROUTES;
+    const [tabOrder, setTabOrder] = React.useState<string[] | null>(null);
+    const [index,    setIndex]    = React.useState(0);
+
+    const ROUTES = React.useMemo(() => {
+        if (!tabOrder) return BASE_ROUTES as any[];
+        return [...BASE_ROUTES].sort((a, b) => {
+            const ai = tabOrder.indexOf(a.key);
+            const bi = tabOrder.indexOf(b.key);
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        });
+    }, [BASE_ROUTES, tabOrder]);
+
+    const profileIndex = ROUTES.findIndex((r: any) => r.key === 'profile');
+    const eventsIndex  = ROUTES.findIndex((r: any) => r.key === 'events');
+
+    useEffect(() => {
+        loadTabOrder().then(setTabOrder);
+        const orderSub = DeviceEventEmitter.addListener(TAB_ORDER_CHANGED, () => {
+            loadTabOrder().then(setTabOrder);
+        });
+        const eventsSub = DeviceEventEmitter.addListener(NAVIGATE_TO_EVENTS_EVENT, () => {
+            const idx = ROUTES.findIndex((r: any) => r.key === 'events');
+            if (idx >= 0) setIndex(idx);
+        });
+        return () => { orderSub.remove(); eventsSub.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const renderScene = React.useCallback(
         ({ route }: { route: { key: string } }) => {
@@ -79,7 +109,7 @@ function MainApp() {
     );
 
     return (
-        <SafeAreaView style={styles.root}>
+        <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
             <TabView
                 navigationState={{ index, routes: ROUTES as any }}
                 renderScene={renderScene}
@@ -89,10 +119,10 @@ function MainApp() {
                     <TabBar
                         {...props}
                         scrollEnabled
-                        indicatorStyle={styles.indicator}
-                        style={styles.tabBar}
-                        activeColor={Colors.accent}
-                        inactiveColor={Colors.text.secondary}
+                        indicatorStyle={{ backgroundColor: colors.accent, height: 3 }}
+                        style={{ backgroundColor: colors.tabBar, borderBottomWidth: 1, borderBottomColor: colors.tabBarBorder }}
+                        activeColor={colors.accent}
+                        inactiveColor={colors.text.secondary}
                         labelStyle={styles.tabLabel}
                         tabStyle={styles.tabItem}
                     />
@@ -106,11 +136,12 @@ function MainApp() {
 
 function Root() {
     const { user, isLoading } = useAuth();
+    const { colors } = useTheme();
 
     if (isLoading) {
         return (
-            <View style={styles.splash}>
-                <ActivityIndicator color={Colors.accent} size="large" />
+            <View style={[styles.splash, { backgroundColor: colors.background }]}>
+                <ActivityIndicator color={colors.accent} size="large" />
             </View>
         );
     }
@@ -127,18 +158,18 @@ export default function App() {
 
     return (
         <ErrorBoundary>
-            <AuthProvider>
-                <Root />
-            </AuthProvider>
+            <ThemeProvider>
+                <AuthProvider>
+                    <Root />
+                </AuthProvider>
+            </ThemeProvider>
         </ErrorBoundary>
     );
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: Colors.background },
-    splash: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' },
-    tabBar: { backgroundColor: Colors.tabBar, borderBottomWidth: 1, borderBottomColor: Colors.tabBarBorder },
+    root: { flex: 1 },
+    splash: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     tabItem: { width: 'auto', paddingHorizontal: 14, minWidth: 80 },
-    indicator: { backgroundColor: Colors.accent, height: 3 },
     tabLabel: { fontSize: FontSize.sm, fontWeight: '600', textTransform: 'capitalize' },
 });

@@ -278,16 +278,25 @@ async function fetchHNHiringJobs(): Promise<UnifiedJob[]> {
 
 type FetchResult = { jobs: UnifiedJob[]; sourcesLoaded: number; usedHN: boolean };
 
-async function fetchAllJobs(): Promise<FetchResult> {
+async function fetchAllJobs(skills: string[] = []): Promise<FetchResult> {
+    // Build skill search params from user profile
+    const skillQuery = skills.slice(0, 3).join(' ').trim();
+    const remotiveSearch = skillQuery
+        ? `https://remotive.com/api/remote-jobs?category=software-dev&search=${encodeURIComponent(skillQuery)}&limit=50`
+        : 'https://remotive.com/api/remote-jobs?category=software-dev&limit=50';
+    const jobicyTag = skills.length
+        ? skills[0].toLowerCase().replace(/\s+/g, '-')
+        : 'javascript';
+
     // Try all 4 job board APIs in parallel
     const [r1, r2, r3, r4] = await Promise.allSettled([
-        getJson<any>('https://remotive.com/api/remote-jobs?category=software-dev&limit=50')
+        getJson<any>(remotiveSearch)
             .then(d => normRemotive(d.jobs ?? [])),
         getJson<any>('https://www.arbeitnow.com/api/job-board-api')
             .then(d => normArbeitnow(d.data ?? [])),
         getJson<any>('https://remoteok.com/api', { headers: { 'User-Agent': 'Mozilla/5.0' } })
             .then(d => normRemoteOK(Array.isArray(d) ? d : [])),
-        getJson<any>('https://jobicy.com/api/v2/remote-jobs?count=30&tag=javascript')
+        getJson<any>(`https://jobicy.com/api/v2/remote-jobs?count=30&tag=${encodeURIComponent(jobicyTag)}`)
             .then(d => normJobicy(d.jobs ?? [])),
     ]);
 
@@ -308,9 +317,15 @@ async function fetchAllJobs(): Promise<FetchResult> {
             const hnJobs = await fetchHNHiringJobs();
             combined = combined.concat(hnJobs);
             if (hnJobs.length > 0) usedHN = true;
-        } catch {
-            // HN also failed — leave combined as is
-        }
+        } catch {}
+    }
+
+    // If we have skills but still no results, fetch broad category results as fallback
+    if (combined.length < 5 && skills.length > 0) {
+        try {
+            const broad = await getJson<any>('https://remotive.com/api/remote-jobs?category=software-dev&limit=30');
+            combined = combined.concat(normRemotive(broad.jobs ?? []));
+        } catch {}
     }
 
     // Deduplicate by title+company
@@ -346,7 +361,9 @@ function locationScore(job: UnifiedJob, city: string): number {
     if (loc.includes('india') || loc.includes('bengaluru') || loc.includes('bangalore') ||
         loc.includes('hyderabad') || loc.includes('mumbai') || loc.includes('pune') ||
         loc.includes('tamil') || loc.includes('noida') || loc.includes('gurgaon') ||
-        loc.includes('kochi') || loc.includes('coimbatore')) return 3;
+        loc.includes('kochi') || loc.includes('coimbatore') || loc.includes('delhi') ||
+        loc.includes('kolkata') || loc.includes('ahmedabad') || loc.includes('in,') ||
+        loc === 'in' || loc.endsWith(', in')) return 3;
     if (loc.includes('remote') || loc.includes('worldwide') || loc.includes('anywhere') ||
         loc === '' || job.jobType.toLowerCase().includes('remote')) return 2;
     if (loc.includes('asia') || loc.includes('apac')) return 2;
@@ -390,12 +407,12 @@ export default function JobsScreen() {
         return () => { isMounted.current = false; };
     }, []);
 
-    const loadJobs = useCallback(async () => {
+    const loadJobs = useCallback(async (skills?: string[]) => {
         if (!isMounted.current) return;
         setLoading(true);
         setError(null);
         try {
-            const result = await fetchAllJobs();
+            const result = await fetchAllJobs(skills ?? userSkills);
             if (!isMounted.current) return;
             setAllJobs(result.jobs);
             setUsedHN(result.usedHN);
@@ -406,16 +423,18 @@ export default function JobsScreen() {
         } finally {
             if (isMounted.current) setLoading(false);
         }
-    }, []);
+    }, [userSkills]);
 
     useEffect(() => {
         storageGet<UserProfile>('user_profile_v1').then(p => {
             if (!isMounted.current) return;
-            setUserSkills(p?.skills ?? []);
-            setUserLocation(p?.location ?? '');
+            const skills = p?.skills ?? [];
+            const location = p?.location ?? '';
+            setUserSkills(skills);
+            setUserLocation(location);
+            loadJobs(skills);
         });
-        loadJobs();
-    }, [loadJobs]);
+    }, []);
 
     // city extracted from profile location ("Chennai, Tamil Nadu" → "Chennai")
     const profileCity = userLocation.split(',')[0].trim();
@@ -489,10 +508,17 @@ export default function JobsScreen() {
                 </View>
             ) : null}
 
-            {usingSkillFallback && (
+            {skillsLower.length === 0 && !search.trim() && (
+                <View style={[styles.skillFallbackBanner, { borderColor: '#F59E0B44', backgroundColor: 'rgba(245,158,11,0.08)' }]}>
+                    <Text style={[styles.skillFallbackText, { color: '#F59E0B' }]}>
+                        💡 Set your skills in the Profile tab to get personalised job matches.
+                    </Text>
+                </View>
+            )}
+            {usingSkillFallback && skillsLower.length > 0 && (
                 <View style={styles.skillFallbackBanner}>
                     <Text style={styles.skillFallbackText}>
-                        No exact skill matches — showing all jobs. Update skills in Profile tab.
+                        No exact skill matches — showing all jobs. Try updating skills in Profile.
                     </Text>
                 </View>
             )}

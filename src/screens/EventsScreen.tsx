@@ -18,6 +18,7 @@ import {
 import GradientBackground from '../components/GradientBackground';
 import StepperInput from '../components/StepperInput';
 import { Colors, FontSize, Radii, Spacing } from '../config/theme';
+import * as Contacts from 'expo-contacts';
 import { storageGet, storageSet } from '../utils/storage';
 import { cloudRead, cloudWrite, getDeviceId } from '../utils/cloudSync';
 import {
@@ -594,6 +595,29 @@ function EventModal({ visible, event, onSave, onClose }: ModalProps) {
                                 keyboardType="phone-pad"
                                 maxLength={10}
                             />
+                            <TouchableOpacity
+                                style={modal.pickContactBtn}
+                                onPress={async () => {
+                                    const { status } = await Contacts.requestPermissionsAsync();
+                                    if (status !== 'granted') {
+                                        Alert.alert('Permission needed', 'Allow contacts access in your device settings to pick a contact.');
+                                        return;
+                                    }
+                                    const result = await Contacts.presentContactPickerAsync();
+                                    if (result?.phoneNumbers?.length) {
+                                        const raw = result.phoneNumbers[0].number ?? '';
+                                        const digits = raw.replace(/\D/g, '');
+                                        // Strip +91 country code if present
+                                        const local = digits.startsWith('91') && digits.length === 12
+                                            ? digits.slice(2)
+                                            : digits;
+                                        setContactNumber(local.slice(0, 10));
+                                    }
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={modal.pickContactText}>📞</Text>
+                            </TouchableOpacity>
                         </View>
 
                         {/* Always-visible schedule box */}
@@ -798,6 +822,11 @@ const modal = StyleSheet.create({
         fontSize: FontSize.body,
     },
     phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
+    pickContactBtn: {
+        backgroundColor: Colors.accentSoft, borderRadius: Radii.md, borderWidth: 1,
+        borderColor: Colors.accent + '50', paddingHorizontal: 10, paddingVertical: 9,
+    },
+    pickContactText: { fontSize: 18 },
     countryCode: {
         backgroundColor: Colors.surface, borderRadius: Radii.md, borderWidth: 1,
         borderColor: Colors.inputBorder, padding: Spacing.md,
