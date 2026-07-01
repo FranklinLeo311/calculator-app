@@ -7,6 +7,21 @@ type Props = {
     result: string;
 };
 
+function resultFontSize(text: string): number {
+    const len = text.length;
+    if (len <= 9)  return FontSize.display;   // 48
+    if (len <= 12) return 36;
+    if (len <= 16) return 28;
+    return 22;
+}
+
+function formulaFontSize(text: string): number {
+    const len = text.length;
+    if (len <= 20) return FontSize.lg;        // 18
+    if (len <= 30) return 15;
+    return 12;
+}
+
 export default React.memo(function Display({ formula, result }: Props) {
     const displayFormula = formula?.trim() ? formula : '0';
     const displayResult = result?.trim() ? result : '0';
@@ -15,17 +30,19 @@ export default React.memo(function Display({ formula, result }: Props) {
         <View style={styles.container}>
             <View style={styles.box}>
                 <Text
-                    style={styles.formula}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
+                    style={[styles.formula, { fontSize: formulaFontSize(displayFormula) }]}
+                    numberOfLines={2}
+                    ellipsizeMode="head"
                     accessibilityLabel={`Expression: ${displayFormula}`}
                 >
                     {displayFormula}
                 </Text>
                 <Text
-                    style={styles.result}
+                    style={[styles.result, { fontSize: resultFontSize(displayResult) }]}
                     numberOfLines={1}
-                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.5}
+                    ellipsizeMode="head"
                     accessibilityLabel={`Result: ${displayResult}`}
                 >
                     {displayResult}
